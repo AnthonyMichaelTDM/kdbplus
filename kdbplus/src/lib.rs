@@ -493,8 +493,16 @@ pub mod qninf_base {
 // >> Export Modules
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+#[cfg(all(feature = "rusty-api", feature = "api"))]
+compile_error!("feature \"rusty-api\" and \"api\" are mutually exclusive");
+#[cfg(not(any(feature = "rusty-api", feature = "api", feature = "ipc")))]
+compile_error!("feature \"rusty-api\" or \"api\" or \"ipc\" must be enabled");
+
 #[cfg(feature = "api")]
 pub mod api;
+
+#[cfg(feature = "rusty-api")]
+pub mod rusty_api;
 
 #[cfg(feature = "ipc")]
 pub mod ipc;

@@ -39,6 +39,7 @@ required-features = ["ipc"]
 default = []
 # Select one of two features
 api = []
+rusty-api = []
 ipc = [
   "once_cell",
   "chrono",
@@ -60,4 +61,3 @@ tokio-test = "0.4"
 
 [package.metadata.docs.rs]
 all-features = true
-
