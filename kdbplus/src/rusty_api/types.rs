@@ -2,7 +2,7 @@
 // >> Structs
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
-use super::{re_exports, str_to_S, SafeToCastFromKInner, K, KNULL};
+use super::{re_exports, SafeToCastFromKInner, K, KNULL, S};
 use crate::qtype;
 
 /// Rust friendly wrapper for q Atoms and Lists.
@@ -44,38 +44,6 @@ impl<'a, T: 'a + std::fmt::Debug> KData<'a, T> {
     }
 }
 
-// TODO: figure out how to not need this
-pub enum KSymbol<'a> {
-    /// Symbol atom
-    Atom(&'a str),
-    /// Symbol list
-    List(Vec<&'a str>),
-}
-
-impl<'a> KSymbol<'a> {
-    #[inline]
-    /// # Safety
-    /// k must be a valid pointer to a valid K object of type symbol
-    fn atom(k: &'a K) -> KSymbol<'a> {
-        KSymbol::Atom(unsafe { super::utils::S_to_str(*k.cast()) })
-    }
-
-    #[inline]
-    /// # Safety
-    /// same as [`K::as_slice`](type.K.html#method.as_slice)
-    /// but, additionally k must be a list of type symbol
-    /// and all elements of the list must be valid symbols
-    fn list(k: &'a K) -> KSymbol<'a> {
-        KSymbol::List(
-            k.as_slice()
-                .unwrap()
-                .iter()
-                .map(|&x| unsafe { super::utils::S_to_str(x) })
-                .collect::<Vec<&str>>(),
-        )
-    }
-}
-
 /// Rust friendly wrapper for q types.
 /// used to represent [`K`](type.K.html) values from q, in idiomatically Rusty way.
 /// TODO: optimizations: use types that more closely match what Q expects, not what is convenient
@@ -103,8 +71,8 @@ pub enum KVal<'a> {
     Float(KData<'a, f64>),
     /// Note: the C api uses [`I`](types.I.html) (i32) for chars. we use u8 (c_uchar) in Rust https://github.com/KxSystems/kdb/blob/bbc40b8cb870948122a36cb80a486bc5f7e470d7/c/c/k.h#L29.
     Char(&'a u8),
-    /// Note: the C api uses [`S`](types.S.html) (*mut c_char) for symbols. we use &str in Rust.
-    Symbol(KSymbol<'a>),
+    /// Note: the C api uses [`S`](types.S.html) (*mut c_char) for symbols. we use the same in Rust to avoid unecessary unsafety.
+    Symbol(KData<'a, S>),
     /// Note: the C api uses [`J`](types.J.html) (i64) for timestamps. we use i64 in Rust.
     Timestamp(KData<'a, i64>),
     /// Note: the C api uses [`I`](types.I.html) (i32) for months. we use i32 in Rust.
@@ -207,7 +175,7 @@ impl<'a> KVal<'a> {
             /* -14  */ qtype::DATE_ATOM => KVal::Date(KData::atom(k)),
             /* -13  */ qtype::MONTH_ATOM => KVal::Month(KData::atom(k)),
             /* -12  */ qtype::TIMESTAMP_ATOM => KVal::Timestamp(KData::atom(k)),
-            /* -11  */ qtype::SYMBOL_ATOM => KVal::Symbol(KSymbol::atom(k)),
+            /* -11  */ qtype::SYMBOL_ATOM => KVal::Symbol(KData::atom(k)),
             /* -10  */ qtype::CHAR => KVal::Char(k.cast()),
             /* -9   */ qtype::FLOAT_ATOM => KVal::Float(KData::atom(k)),
             /* -8   */ qtype::REAL_ATOM => KVal::Real(KData::atom(k)),
@@ -228,7 +196,7 @@ impl<'a> KVal<'a> {
             /* 8    */ qtype::REAL_LIST => KVal::Real(KData::list(k)),
             /* 9    */ qtype::FLOAT_LIST => KVal::Float(KData::list(k)),
             /* 10   */ qtype::STRING => KVal::String(as_str(k)),
-            /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KSymbol::list(k)),
+            /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KData::list(k)),
             /* 12   */ qtype::TIMESTAMP_LIST => KVal::Timestamp(KData::list(k)),
             /* 13   */ qtype::MONTH_LIST => KVal::Month(KData::list(k)),
             /* 14   */ qtype::DATE_LIST => KVal::Date(KData::list(k)),
@@ -348,19 +316,14 @@ impl<'a> KVal<'a> {
                     .copy_from_slice(list);
                 k.cast_const()
             }
-            KVal::Symbol(KSymbol::Atom(atom)) => re_exports::new_symbol(atom),
-            KVal::Symbol(KSymbol::List(list)) => {
+            KVal::Symbol(KData::Atom(&atom)) => re_exports::new_symbol_from_S(atom),
+            KVal::Symbol(KData::List(list)) => {
                 let k = re_exports::new_list(qtype::SYMBOL_LIST, list.len().try_into().unwrap())
                     .cast_mut();
                 unsafe { &mut *k }
-                    .as_mut_slice::<super::S>()
+                    .as_mut_slice::<S>()
                     .unwrap()
-                    .copy_from_slice(
-                        list.iter()
-                            .map(|s| str_to_S(s))
-                            .collect::<Vec<_>>()
-                            .as_slice(),
-                    );
+                    .copy_from_slice(list);
                 k.cast_const()
             }
             KVal::Timestamp(KData::Atom(&atom)) => re_exports::new_timestamp(atom),
