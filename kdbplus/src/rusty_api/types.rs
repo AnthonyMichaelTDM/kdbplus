@@ -82,8 +82,8 @@ impl<'a> KSymbol<'a> {
 /// for rust (e.g. use `S` for symbols instead of `&str`)
 pub enum KVal<'a> {
     // by doing it this way, we can use the same enum for both atoms and lists
-    /// Vector, containing a list of [`K`](type.K.html) values.
-    CompoundList(Vec<KVal<'a>>),
+    /// Slice of pointers to other K objects
+    CompoundList(&'a [*mut K]),
     /// Note: the C api uses [`I`](types.I.html) (i32) for booleans. we will use i32 just for
     /// convenience in Rust.
     Bool(KData<'a, i32>),
@@ -124,8 +124,9 @@ pub enum KVal<'a> {
     // TODO: Enum
     /// Note: the C api uses [`S`](types.S.html) (*mut c_char) for strings. we use &str in Rust.
     String(&'a str),
-    // TODO: fixed size string
+    // TODO: Foreign
     // TODO: Dictionary
+    // TODO: Sorted Dictionary
     // TODO: Table
     /// q Error, created by krr or orr
     Err(&'a str),
@@ -168,7 +169,7 @@ impl<'a> KVal<'a> {
         if k.is_null() {
             return KVal::Null;
         }
-        unsafe { Self::new(&*k) }
+        Self::new(unsafe { &*k })
     }
 
     /// Create a new KVal from a reference to a [`K`](type.K.html) value.
@@ -217,13 +218,7 @@ impl<'a> KVal<'a> {
             /* -2   */ qtype::GUID_ATOM => KVal::Guid(KData::guid_atom(k)),
             /* -1   */ qtype::BOOL_ATOM => KVal::Bool(KData::atom(k)),
             /* 0    */
-            qtype::COMPOUND_LIST => KVal::CompoundList(
-                k.as_slice::<*mut K>()
-                    .unwrap()
-                    .iter()
-                    .map(|&sk| Self::new(unsafe { &*sk }))
-                    .collect(),
-            ),
+            qtype::COMPOUND_LIST => KVal::CompoundList(k.as_slice::<*mut K>().unwrap()),
             /* 1    */ qtype::BOOL_LIST => KVal::Bool(unsafe { KData::list_unchecked(k) }),
             /* 2    */ qtype::GUID_LIST => KVal::Guid(KData::list(k)),
             /* 4    */ qtype::BYTE_LIST => KVal::Byte(KData::list(k)),
@@ -257,6 +252,7 @@ impl<'a> KVal<'a> {
     /// Convert this value back into a K value,
     /// though technically, because KVal operates on references, changes should propagate TODO: Unsure of this
     ///
+    /// # Note
     /// uses methods from the native q api to create NEW K objects from the data in this value.
     ///
     /// TODO: support zero-copy conversion (idea: store the original K object and modify that to create a new one?)
@@ -269,13 +265,7 @@ impl<'a> KVal<'a> {
                 unsafe { &mut *k }
                     .as_mut_slice::<*mut K>()
                     .unwrap()
-                    .copy_from_slice(
-                        list.iter()
-                            .map(|v| v.to_k().cast_mut()) // recursively convert each element to a
-                            // K object
-                            .collect::<Vec<_>>()
-                            .as_slice(),
-                    );
+                    .copy_from_slice(list);
                 k.cast_const()
             }
             KVal::Bool(KData::Atom(&atom)) => re_exports::new_bool(atom),
