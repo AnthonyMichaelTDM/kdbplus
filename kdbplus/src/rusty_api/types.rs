@@ -120,9 +120,7 @@ impl<'a> KVal<'a> {
     ///     .unwrap()
     /// }
     ///
-    /// ...
-    ///
-    ///# [test]
+    ///# #[test]
     ///# fn test_plus_one_int() {
     ///     let k = native::ki(1);
     ///     let k = unsafe { plus_one_int(&k) };
@@ -143,20 +141,32 @@ impl<'a> KVal<'a> {
     /// Create a new KVal from a reference to a [`K`](type.K.html) value.
     ///
     /// # Examples
+    /// TODO: test this example, make sure rust doesn't take ownership of the value
     /// ```no_run
     /// use kdbplus::rusty_api::K;
-    /// use kdbplus::rusty_api::types::KVal;
-    /// use kdbplus::rusty_api::native::*;
+    /// use kdbplus::rusty_api::types::{KVal, KData};
+    /// use kdbplus::rusty_api::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn plus_one_int(k: *const K) -> *const K {
-    ///     let addr = catch_unwind(|| match KVal::new(k) {
-    ///        KVal::Int(KData::Atom(i)) => KVal::Int(KData::Atom(i + 1)),
-    ///        _ => unsafe {new_error("type error\0")},
+    ///     // assuming k is a non-null, and valid, pointer to a K value
+    ///     std::panic::catch_unwind(move || {
+    ///         let KVal::Int(KData::Atom(mut value)) = KVal::new(unsafe{&*k}) else {
+    ///             return new_error("type error\0");
+    ///         };
+    ///
+    ///         *value += 1;
+    ///
+    ///         k
     ///     }).or_else::<u8, _>(|_| Ok(new_error("rust panic\0")))
     ///     .unwrap()
     /// }
     /// ```
+    ///
+    /// # Note
+    /// while calling it `new` does imply that there is an allocation involved, this should be a
+    /// zero-copy wrapper that directly references the internals of the given `k`,
+    /// TODO: rename this to avoid confusion (maybe just imple the Into trait for these?)
     ///
     /// # Safety
     /// The value of `k` must be correct for it's qtype.
