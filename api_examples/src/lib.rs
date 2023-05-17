@@ -303,9 +303,7 @@ pub extern "C" fn print_string2(string: K) -> K {
 #[no_mangle]
 pub extern "C" fn hidden_key(table: K) -> K {
     match table.get_dictionary() {
-        Ok(dictionary) => unsafe { dictionary.as_mut_slice::<K>()[0] }
-            .q_ipc_encode(3)
-            .unwrap(),
+        Ok(dictionary) => unsafe { dictionary.as_mut_slice::<K>()[0].q_ipc_encode(3).unwrap() },
         Err(error) => new_error(error),
     }
 }
@@ -327,10 +325,9 @@ pub extern "C" fn pick_row(object: K, index: K) -> K {
 /// unsafe because of `append`.
 #[no_mangle]
 pub unsafe extern "C" fn concat_list2(mut list1: K, list2: K) -> K {
-    if let Err(err) = unsafe { list1.append(increment_reference_count(list2)) } {
-        new_error(err)
-    } else {
-        increment_reference_count(list1)
+    match unsafe { list1.append(increment_reference_count(list2)) } {
+        Ok(result) => increment_reference_count(result),
+        Err(error) => new_error(error),
     }
 }
 

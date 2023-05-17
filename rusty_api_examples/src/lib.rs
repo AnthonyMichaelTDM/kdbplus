@@ -18,6 +18,35 @@ use kdbplus::rusty_api::*;
 //                           KVal as a constructor                      //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+///////////////////////////////////////////
+// examples for KVal::as_compound_list() //
+///////////////////////////////////////////
+
+// make a compound list from scratch
+#[no_mangle]
+pub extern "C" fn drift(_: *const K) -> *const K {
+    KVal::CompoundList(&[
+        KVal::Int(KData::Atom(12)).to_k(),
+        KVal::Int(KData::Atom(34)).to_k(),
+        KVal::Symbol(KData::Atom("vague")).to_k(),
+        KVal::Int(KData::Atom(-3000)).to_k(),
+    ])
+    .to_k()
+}
+// make a compound list from an existing simple list
+#[no_mangle]
+pub extern "C" fn drift2(_: *const K) -> *const K {
+    let compound = KVal::Enum(KData::List(&[0_i64, 1])).as_compound_list("enum");
+
+    // Convert an enum indices into a compound list while creating enum values from the indices which are tied with
+    //  an existing enum variable named "enum", i.e., Enum indices [0, 1] in the code are cast into `(enum[0]; enum[1])`.
+    let mut compound = unsafe { simple_to_compound(simple, "enum") };
+    // Add `enum2[2]`.
+    compound.push(new_enum("enum2", 2)).unwrap();
+    compound.push(new_month(3)).unwrap();
+    compound
+}
+
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                  KVal as wrapper for operations                      //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
@@ -54,7 +83,10 @@ fn test_plus_one_int() {
 //                              Re Exports                              //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+///////////////////////////////////
 // example for register_callback //
+///////////////////////////////////
+
 static mut PIPE: [I; 2] = [-1, -1];
 // Callback for some message queue.
 extern "C" fn callback(socket: I) -> *const K {

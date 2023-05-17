@@ -42,7 +42,7 @@ impl<'a, T: 'a + std::fmt::Debug + SafeToCastFromKInner> KData<'a, T> {
 pub enum KVal<'a> {
     // by doing it this way, we can use the same enum for both atoms and lists
     /// Slice of pointers to other K objects
-    CompoundList(&'a [*mut K]),
+    CompoundList(Vec<*mut K>),
     /// Note: the C api uses [`I`] (i32) for booleans. we do too to leave as much control in the
     /// implementors hands in Rust.
     Bool(KData<'a, i32>),
@@ -133,11 +133,11 @@ impl<'a> From<&'a K> for KVal<'a> {
     /// * The value of `k` must be correct for it's qtype.
     /// * This function takes a reference so it's up to implementors to correctly dereference the
     ///   pointer passed by q and returned by the C api's functions.
-    /// * don't operate on the passed `k` after it's been passed to this function unless you know
-    ///   what you're doing.
-    /// * you should not try to mutate the value of `k` after it's been passed to this function.
-    /// * you should not try to mutate the value of the returned KVal as a way to change the
-    ///   underlying k object, q is a functional language so functions should not have side effects.
+    /// * don't use `k` after it's been passed to this function unless you know exactly
+    ///   what you're doing,
+    ///   * treat k as if it's been moved into this function, because it effectively has been.
+    ///   * you should not try to mutate the value of the returned KVal as a way to change the
+    ///     underlying k object, q is a functional language so functions should not have side effects.
     fn from(k: &'a K) -> KVal<'a> {
         match k.qtype {
             /* -128 */ qtype::ERROR => KVal::Err(k.cast()),
@@ -161,7 +161,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* -2   */ qtype::GUID_ATOM => KVal::Guid(KData::guid_atom(k)),
             /* -1   */ qtype::BOOL_ATOM => KVal::Bool(KData::atom(k)),
             /* 0    */
-            qtype::COMPOUND_LIST => KVal::CompoundList(k.as_slice::<*mut K>().unwrap()),
+            qtype::COMPOUND_LIST => KVal::CompoundList(k.as_slice::<*mut K>().unwrap().to_owned()),
             /* 1    */ qtype::BOOL_LIST => KVal::Bool(KData::list(k)),
             /* 2    */ qtype::GUID_LIST => KVal::Guid(KData::list(k)),
             /* 4    */ qtype::BYTE_LIST => KVal::Byte(KData::list(k)),
@@ -192,6 +192,145 @@ impl<'a> From<&'a K> for KVal<'a> {
 }
 
 impl<'a> KVal<'a> {
+    /// Convert this KVal into a CompoundList variant
+    ///
+    /// port of [`simple_to_compound`](crate::api::simple_to_compound)
+    ///
+    /// # Examples
+    ///
+    /// ```q
+    /// q)drift: LIBPATH_ (`drift; 1);
+    /// q)drift2: LIBPATH_ (`drift2; 1);
+    /// q)drift[]
+    /// 12i
+    /// 34i
+    /// `vague
+    /// -3000i
+    /// q)enum: `mashroom`broccoli`cucumber
+    /// q)enum2: `mackerel`swordfish`tuna
+    /// q)drift2[]
+    /// `enum$`mashroom
+    /// `enum$`broccoli
+    /// `enum2$`tuna
+    /// 2000.04m
+    /// ```
+    ///
+    /// # Note
+    /// * creates new k objects when necessary
+    /// * if the KVal is an Enum List, enum_source must be provided
+    /// * if the KVal is already a CompoundList variant, it will be returned as is
+    /// * if the KVal is a simple list, it's contants will be converted to k objects and placed in a new CompoundList
+    /// * if KVal is not a list, an error will be returned
+    /// * Enum elements from different enum sources must be contained in a compound list. Therefore
+    ///   this function intentionally restricts the number of enum sources to one so that user switches
+    ///   a simple list to a compound list when the second enum sources are provided.
+    ///
+    /// # Safety
+    /// enum_source must be able to be converted to a C string (i.e. no null bytes)
+    #[inline]
+    pub fn as_compound_list(&'a self, enum_source: Option<&'a str>) -> KVal<'a> {
+        use KData::*;
+        use KVal::*;
+        match self {
+            Bool(List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_bool(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Guid(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_guid(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Byte(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_byte(atom.into()).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Short(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_short(atom.into()).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Int(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_int(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Long(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_long(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Real(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_real(atom.into()).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Float(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_float(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Symbol(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| unsafe { re_exports::new_symbol_from_S(atom) }.cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Timestamp(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_timestamp(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Month(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_month(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Date(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_date(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Datetime(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_datetime(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Timespan(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_timespan(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Minute(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_minute(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Second(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_second(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Time(KData::List(list)) => CompoundList(
+                list.iter()
+                    .map(|&atom| re_exports::new_time(atom).cast_mut())
+                    .collect::<Vec<_>>(),
+            ),
+            Enum(KData::List(list)) => {
+                let Some(source) = enum_source else {
+                    return KVal::from(unsafe {&*re_exports::new_error("Enum list must have exactly one source per atom\0")});
+                };
+                CompoundList(
+                    list.iter()
+                        .map(|&atom| re_exports::new_enum(source, atom).cast_mut())
+                        .collect::<Vec<_>>(),
+                )
+            }
+            _ => KVal::from(unsafe { &*re_exports::new_error("not a simple list\0") }),
+        }
+    }
+
     /// Convert this value back into a K value,
     ///
     /// # Note
@@ -210,7 +349,7 @@ impl<'a> KVal<'a> {
                 unsafe { &mut *k }
                     .as_mut_slice::<*mut K>()
                     .unwrap()
-                    .copy_from_slice(list);
+                    .copy_from_slice(&list);
                 k.cast_const()
             }
             KVal::Bool(KData::Atom(&atom)) => re_exports::new_bool(atom),
