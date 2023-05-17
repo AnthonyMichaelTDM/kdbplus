@@ -80,7 +80,13 @@ pub enum KVal<'a> {
     Second(KData<'a, i32>),
     /// Note: the C api uses [`I`] (i32) for time. we use i32 in Rust.
     Time(KData<'a, i32>),
-    // TODO: Enum
+    /// # Note
+    /// * the C api uses [`J`] (i64) for enumeration. we use i64 in Rust.
+    /// * this implementation assumes that an Enum is just an index, as that's how it's used in the
+    ///   [`api`] module.
+    /// * if your KVal is Enum Atom, you'll need to use [`to_k!(kval, enum_src)`](to_k) to convert
+    ///   it to a K object. [`to_k`](to_k) will panic if you try to convert a enum atom.
+    Enum(KData<'a, i64>),
     /// Note: the C api uses [`S`] (*mut c_char) for strings. we will too for added flexibility in Rust.
     String(&'a S),
     // TODO: Foreign
@@ -135,7 +141,7 @@ impl<'a> From<&'a K> for KVal<'a> {
     fn from(k: &'a K) -> KVal<'a> {
         match k.qtype {
             /* -128 */ qtype::ERROR => KVal::Err(k.cast()),
-            /* -20  */ qtype::ENUM_ATOM => todo!(),
+            /* -20  */ qtype::ENUM_ATOM => KVal::Enum(KData::atom(k)),
             /* -19  */ qtype::TIME_ATOM => KVal::Time(KData::atom(k)),
             /* -18  */ qtype::SECOND_ATOM => KVal::Second(KData::atom(k)),
             /* -17  */ qtype::MINUTE_ATOM => KVal::Minute(KData::atom(k)),
@@ -174,7 +180,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* 17   */ qtype::MINUTE_LIST => KVal::Minute(KData::list(k)),
             /* 18   */ qtype::SECOND_LIST => KVal::Second(KData::list(k)),
             /* 19   */ qtype::TIME_LIST => KVal::Time(KData::list(k)),
-            /* 20   */ qtype::ENUM_LIST => todo!(),
+            /* 20   */ qtype::ENUM_LIST => KVal::Enum(KData::list(k)),
             /* 99   */ qtype::TABLE => todo!(),
             /* 101  */ qtype::DICTIONARY => todo!(),
             /* 112  */ qtype::FOREIGN => todo!(),
@@ -187,7 +193,6 @@ impl<'a> From<&'a K> for KVal<'a> {
 
 impl<'a> KVal<'a> {
     /// Convert this value back into a K value,
-    /// though technically, because KVal operates on references, changes should propagate TODO: Unsure of this
     ///
     /// # Note
     /// * uses methods from the native q api to create NEW K objects from the data in this value.
@@ -378,10 +383,58 @@ impl<'a> KVal<'a> {
                     .copy_from_slice(list);
                 k.cast_const()
             }
+            KVal::Enum(KData::Atom(_)) => unimplemented!("pass an enum source to the macro"),
+            KVal::Enum(KData::List(list)) => {
+                let k = re_exports::new_list(qtype::ENUM_LIST, list.len().try_into().unwrap())
+                    .cast_mut();
+                unsafe { &mut *k }
+                    .as_mut_slice::<i64>()
+                    .unwrap()
+                    .copy_from_slice(list);
+                k.cast_const()
+            }
             KVal::Char(&atom) => re_exports::new_char(atom as char),
             KVal::String(&list) => unsafe { re_exports::new_string_from_S(list) },
             KVal::Err(&err) => unsafe { re_exports::new_error_from_S(err) },
             KVal::Null => KNULL,
         }
     }
+}
+
+/// Macro to convert a KVal to a K object.
+///
+/// uses [`to_k`](KVal::to_k) under the hood.
+///
+/// # Examples
+/// ```no_run
+/// use kdbplus::rusty_api::types::*;
+/// use kdbplus::rusty_api::*;
+/// use kdbplus::to_k;
+///
+/// let kval = KVal::Int(KData::Atom(&42));
+/// let k = to_k!(kval);
+/// assert_eq!(k, unsafe { new_int(42) });
+/// ```
+/// ```no_run
+/// # use kdbplus::rusty_api::types::*;
+/// # use kdbplus::rusty_api::*;
+/// # use kdbplus::to_k;
+///
+/// let kval = KVal::Enum(KData::Atom(&1_i64));
+/// let k = to_k!(kval, "enum_src");
+/// assert_eq!(k, unsafe { new_enum("enum_src", 1_i64) });
+/// ```
+#[macro_export]
+macro_rules! to_k {
+    ($kval:expr) => {
+        $kval.to_k()
+    };
+    ($kval:expr, $enum_src:expr ) => {
+        match $kval {
+            kdbplus::rusty_api::types::KVal::Enum(KData::Atom(&atom)) => {
+                kdbplus::rusty_api::new_enum($enum_src, atom)
+            }
+            _ => $kval.to_k(),
+        }
+    };
 }
