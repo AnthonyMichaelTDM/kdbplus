@@ -33,9 +33,9 @@ pub use re_exports::*;
 /// This value must NOT be used as a returned value for functions called by another function
 ///  because [`error_to_string`](fn.error_to_string.html) misunderstands the value as an error.
 ///  For detail, see its warning section.
-pub const KNULL: *const K = 0 as *const K; //TODO: is this the same as std::ptr::null();
+pub const KNULL: *const K = std::ptr::null::<K>();
 /// same as `KNULL` but mutable.
-pub const KNULL_MUT: *mut K = 0 as *mut K; //TODO: is this the same as std::ptr::null_mut();
+pub const KNULL_MUT: *mut K = std::ptr::null_mut::<K>();
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Traits

@@ -8,6 +8,7 @@
 //                            Load Libraries                            //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+// use kdbplus::qtype;
 use kdbplus::rusty_api::native;
 use kdbplus::rusty_api::types::*;
 use kdbplus::rusty_api::*;
@@ -22,15 +23,16 @@ use kdbplus::rusty_api::*;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 // example for KVal::from( &mut K )
+/// # Safety
+/// assumes k is a valid pointer to a K value
 #[no_mangle]
-pub extern "C" fn plus_one_int(k: *mut K) -> *const K {
+pub unsafe extern "C" fn plus_one_int(k: *const K) -> *const K {
     // assuming k is a non-null, and valid, pointer to a K value
     std::panic::catch_unwind(move || {
-        let KVal::Int(KData::Atom(value)) = KVal::from(unsafe{&mut *k}) else {
+        let KVal::Int(KData::Atom(value)) = KVal::from(unsafe{&*k}) else {
              return new_error("type error\0");
-         };
-        *value += 1;
-        k.cast_const()
+        };
+        new_int(value + 1)
     })
     .or_else::<u8, _>(|_| Ok(new_error("rust panic\0")))
     .unwrap()
@@ -40,9 +42,12 @@ pub extern "C" fn plus_one_int(k: *mut K) -> *const K {
 #[test]
 fn test_plus_one_int() {
     // declaring this separately to avoid lifetime issues
-    let k_base = unsafe { native::ki(1) }.cast_mut();
+    let k_base = unsafe { native::ki(1) };
     let k = plus_one_int(k_base);
+    // assert operation was successful
     assert_eq!(k, unsafe { native::ki(2) });
+    // assert original value was not modified
+    assert_eq!(k_base, unsafe { native::ki(1) });
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
@@ -53,13 +58,11 @@ fn test_plus_one_int() {
 static mut PIPE: [I; 2] = [-1, -1];
 // Callback for some message queue.
 extern "C" fn callback(socket: I) -> *const K {
-    let mut buffer: [*mut K; 1] = [0 as *mut K];
+    let mut buffer: [*mut K; 1] = [KNULL_MUT];
     unsafe { libc::read(socket, buffer.as_mut_ptr() as *mut V, 8) };
     // Call `shout` function on q side with the received data.
-    let result =
-        unsafe { error_to_string(unsafe { native::k(0, str_to_S("shout"), buffer[0], KNULL) }) }
-            .cast_mut();
-    if let KVal::Err(&mut err_str) = KVal::from(unsafe { &mut *result }) {
+    let result = unsafe { error_to_string(native::k(0, str_to_S("shout"), buffer[0], KNULL)) };
+    if let KVal::Err(&err_str) = KVal::from(unsafe { &*result }) {
         eprintln!("Execution error: {}", unsafe { S_to_str(err_str) });
         unsafe { decrement_reference_count(result) };
     };
@@ -77,13 +80,13 @@ pub extern "C" fn plumber(_: *const K) -> *const K {
     // Lock symbol in a worker thread.
     pin_symbol();
     let handle = std::thread::spawn(move || {
-        let precious = new_list(qtype::SYMBOL_LIST, 3).cast_mut();
-        let KVal::Symbol(KData::List(precious_array)) = KVal::from(unsafe{&mut *precious}) else {
-        unimplemented!()
-    };
-        precious_array[0] = unsafe { enumerate(null_terminated_str_to_S("belief\0")) };
-        precious_array[1] = unsafe { enumerate(null_terminated_str_to_S("love\0")) };
-        precious_array[2] = unsafe { enumerate(null_terminated_str_to_S("hope\0")) };
+        let precious = KVal::Symbol(KData::List(&[
+            null_terminated_str_to_S("belief\0"),
+            null_terminated_str_to_S("love\0"),
+            null_terminated_str_to_S("hope\0"),
+        ]))
+        .to_k()
+        .cast_mut();
         unsafe { libc::write(PIPE[1], std::mem::transmute::<*mut K, *mut V>(precious), 8) };
     });
     handle.join().unwrap();

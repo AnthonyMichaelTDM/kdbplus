@@ -1066,8 +1066,8 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 ///   let mut buffer: [*mut K; 1]=[0 as *mut K];
 ///   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
 ///   // Call `shout` function on q side with the received data.
-///   let result=unsafe { error_to_string(unsafe{native::k(0, str_to_S("shout"), buffer[0], KNULL)}) }.cast_mut();
-///   if let KVal::Err(&mut err_str) = KVal::from(unsafe{&mut *result}) {
+///   let result=unsafe { error_to_string(unsafe{native::k(0, str_to_S("shout"), buffer[0], KNULL)}) };
+///   if let KVal::Err(& err_str) = KVal::from(unsafe{&*result}) {
 ///     eprintln!("Execution error: {}", unsafe { S_to_str(err_str) });
 ///     unsafe { decrement_reference_count(result) };
 ///   };
@@ -1086,7 +1086,7 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 ///   pin_symbol();
 ///   let handle=std::thread::spawn(move ||{
 ///     let precious=new_list(qtype::SYMBOL_LIST, 3).cast_mut();
-///     let KVal::Symbol(KData::List(precious_array)) = KVal::from(unsafe{&mut *precious}) else {
+///     let KVal::Symbol(KData::List(precious_array)) = KVal::from(unsafe{&*precious}) else {
 ///         unimplemented!()
 ///     };
 ///     precious_array[0]= unsafe { enumerate(null_terminated_str_to_S("belief\0")) };
