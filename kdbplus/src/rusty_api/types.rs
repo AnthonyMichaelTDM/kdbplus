@@ -93,42 +93,7 @@ pub enum KVal<'a> {
     Null,
 }
 
-impl<'a> KVal<'a> {
-    /// Create a new KVal from a const pointer to a [`K`](type.K.html) value.
-    ///
-    /// # Examples
-    /// ```
-    /// use kdbplus::rusty_api::K;
-    /// use kdbplus::rusty_api::types::KVal;
-    /// use kdbplus::rusty_api::native;
-    ///
-    /// #[no_mangle]
-    /// pub extern "C" fn plus_one_int(k: *const K) -> *const K {
-    ///     let addr = catch_unwind(|| match KVal::from_raw(k).unwrap()) {
-    ///        KVal::Int(KData::Atom(i)) => KVal::Int(KData::Atom(i + 1)),
-    ///        _ => unsafe {native::new_error("type error\0")},
-    ///     }).or_else::<u8, _>(|_| Ok(native::new_error("rust panic\0")))
-    ///     .unwrap()
-    /// }
-    ///
-    ///# #[test]
-    ///# fn test_plus_one_int() {
-    ///     let k = native::ki(1);
-    ///     let k = unsafe { plus_one_int(&k) };
-    ///     assert_eq!(k, native::ki(2));
-    ///# }
-    /// ```
-    ///
-    /// # Safety
-    /// parameter 'k' must be a valid pointer to a [`K`](type.K.html) value.
-    /// if 'k' is null, the returned value will be [`KVal::Null`](enum.KVal.html#variant.Null).
-    pub unsafe fn from_raw(k: *const K) -> KVal<'a> {
-        if k.is_null() {
-            return KVal::Null;
-        }
-        Self::new(unsafe { &mut *(k.cast_mut()) })
-    }
-
+impl<'a> From<&'a mut K> for KVal<'a> {
     /// Create a new KVal from a reference to a [`K`](type.K.html) value.
     ///
     /// # Examples
@@ -139,31 +104,36 @@ impl<'a> KVal<'a> {
     /// use kdbplus::rusty_api::*;
     ///
     /// #[no_mangle]
-    /// pub extern "C" fn plus_one_int(k: *const K) -> *const K {
+    /// pub extern "C" fn plus_one_int(k: *mut K) -> *const K {
     ///     // assuming k is a non-null, and valid, pointer to a K value
     ///     std::panic::catch_unwind(move || {
-    ///         let KVal::Int(KData::Atom(mut value)) = KVal::new(unsafe{&*k}) else {
+    ///         let KVal::Int(KData::Atom(value)) = KVal::new(unsafe{&mut *k}) else {
     ///             return new_error("type error\0");
     ///         };
-    ///
     ///         *value += 1;
-    ///
-    ///         k
-    ///     }).or_else::<u8, _>(|_| Ok(new_error("rust panic\0")))
+    ///         k.cast_const()
+    ///     })
+    ///     .or_else::<u8, _>(|_| Ok(new_error("rust panic\0")))
     ///     .unwrap()
     /// }
     /// ```
     ///
     /// # Note
-    /// while calling it `new` does imply that there is an allocation involved, this should be a
-    /// zero-copy wrapper that directly references the internals of the given `k`,
-    /// TODO: rename this to avoid confusion (maybe just imple the Into trait for these?)
+    /// the passed reference is mutable to both indicate that changes to the resulting KVal will
+    /// propagate (if they don't, please opend an issue), and to tell the borrow checker not to let
+    /// people use the k value after it's been passed to this function, changes propagate so it's
+    /// unsafe to use the value after it's been passed to this function.
     ///
     /// # Safety
-    /// The value of `k` must be correct for it's qtype.
-    /// As long as `k` comes from q or the C q api, this will be safe.
-    ///
-    pub fn new(k: &'a mut K) -> KVal<'a> {
+    /// * The value of `k` must be correct for it's qtype.
+    /// * This function takes a reference so it's up to implementors to correctly dereference the
+    ///   pointer passed by q and returned by the C api's functions.
+    /// * don't operate on the passed `k` after it's been passed to this function unless you know
+    ///   what you're doing.
+    /// * changes only propagate to the `value` field of the passed `K` object, if you change the
+    ///   change this KVal into another variant, that will not propagate to the `k` object's `qtype`.
+    ///     * if you need that flexibility, either manually use the re_exports, or use the `api` feature instead
+    fn from(k: &'a mut K) -> KVal<'a> {
         match k.qtype {
             /* -128 */ qtype::ERROR => KVal::Err(k.cast()),
             /* -20  */ qtype::ENUM_ATOM => todo!(),
@@ -211,11 +181,12 @@ impl<'a> KVal<'a> {
             /* 112  */ qtype::FOREIGN => todo!(),
             /* 127  */
             qtype::SORTED_DICTIONARY => todo!(), // probably reuse the dictionary type
-
             _ => KVal::Null,
         }
     }
+}
 
+impl<'a> KVal<'a> {
     // TODO: add a method to convert back to a K value
     /// Convert this value back into a K value,
     /// though technically, because KVal operates on references, changes should propagate TODO: Unsure of this
@@ -223,8 +194,7 @@ impl<'a> KVal<'a> {
     /// # Note
     /// * uses methods from the native q api to create NEW K objects from the data in this value.
     /// * consumes self, this is deliberate as we don't want multiple references to the same data
-    ///
-    /// TODO: support zero-copy conversion (idea: store the original K object and modify that to create a new one?)
+    /// * this function should be used to create NEW K objects from manually initialized KVals
     pub fn to_k(self) -> *const K {
         match self {
             KVal::CompoundList(list) => {
@@ -317,7 +287,7 @@ impl<'a> KVal<'a> {
                     .copy_from_slice(list);
                 k.cast_const()
             }
-            KVal::Symbol(KData::Atom(&mut atom)) => re_exports::new_symbol_from_S(atom),
+            KVal::Symbol(KData::Atom(&mut atom)) => unsafe { re_exports::new_symbol_from_S(atom) },
             KVal::Symbol(KData::List(list)) => {
                 let k = re_exports::new_list(qtype::SYMBOL_LIST, list.len().try_into().unwrap())
                     .cast_mut();
@@ -408,8 +378,8 @@ impl<'a> KVal<'a> {
                 k.cast_const()
             }
             KVal::Char(&mut atom) => re_exports::new_char(atom as char),
-            KVal::String(&mut list) => re_exports::new_string_from_S(list),
-            KVal::Err(&mut err) => re_exports::new_error_from_S(err),
+            KVal::String(&mut list) => unsafe { re_exports::new_string_from_S(list) },
+            KVal::Err(&mut err) => unsafe { re_exports::new_error_from_S(err) },
             KVal::Null => KNULL,
         }
     }

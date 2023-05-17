@@ -1,3 +1,9 @@
+//! Re-export of native functions.
+//!
+//! generally, anything here is going to be unsafe, it's generally safer to use the
+//! [`KVal`](super::types::KVal) wrapper. However, that doesn't always fit every use case, so
+//! these are here to provide that extra flexibility.
+
 use crate::qtype;
 
 use super::{native, utils::*, E, F, G, H, I, J, K, KNULL, KNULL_MUT, S, U, V};
@@ -213,9 +219,12 @@ pub fn new_symbol(symbol: &str) -> *const K {
 /// Constructor of q symbol object from `S`. Relabeling of `ks`.
 ///
 /// same as [`new_symbol`](crate::rusty_api::re_exports::new_symbol) but accepts `S` instead of `&str`
+///
+/// # Safety
+/// passed `cstring` must be valid, meaning it meets the conditions of [`core::ffi:c_str::CStr::from_ptr`]
 #[inline]
 #[allow(non_snake_case)]
-pub fn new_symbol_from_S(symbol: S) -> *const K {
+pub unsafe fn new_symbol_from_S(symbol: S) -> *const K {
     unsafe { native::ks(symbol) }
 }
 
@@ -497,7 +506,7 @@ pub fn new_string(string: &str) -> *const K {
 /// passed `cstring` must be valid, meaning it meets the conditions of [`core::ffi:c_str::CStr::from_ptr`]
 #[inline]
 #[allow(non_snake_case)]
-pub fn new_string_from_S(cstring: S) -> *const K {
+pub unsafe fn new_string_from_S(cstring: S) -> *const K {
     unsafe { native::kp(cstring) }
 }
 
@@ -550,13 +559,7 @@ pub fn new_string_n(string: &str, length: J) -> *const K {
 /// # Safety
 /// inputs must be valid pointers
 #[inline]
-pub fn new_dictionary(keys: *const K, values: *const K) -> *const K {
-    new_dictionary_unsafe(keys, values)
-}
-/// # Safety
-/// inputs must be valid pointers
-#[inline(always)]
-fn new_dictionary_unsafe(keys: *const K, values: *const K) -> *const K {
+pub unsafe fn new_dictionary(keys: *const K, values: *const K) -> *const K {
     unsafe { native::xD(keys, values) }
 }
 
@@ -619,7 +622,7 @@ pub fn new_error(message: &str) -> *const K {
 /// passed `cstring` must be valid, meaning it meets the conditions of [`core::ffi:c_str::CStr::from_ptr`]
 #[inline]
 #[allow(non_snake_case)]
-pub fn new_error_from_S(cstring: S) -> *const K {
+pub unsafe fn new_error_from_S(cstring: S) -> *const K {
     unsafe { native::krr(cstring) }
 }
 
