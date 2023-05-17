@@ -107,7 +107,7 @@ impl<'a> From<&'a mut K> for KVal<'a> {
     /// pub extern "C" fn plus_one_int(k: *mut K) -> *const K {
     ///     // assuming k is a non-null, and valid, pointer to a K value
     ///     std::panic::catch_unwind(move || {
-    ///         let KVal::Int(KData::Atom(value)) = KVal::new(unsafe{&mut *k}) else {
+    ///         let KVal::Int(KData::Atom(value)) = KVal::from(unsafe{&mut *k}) else {
     ///             return new_error("type error\0");
     ///         };
     ///         *value += 1;

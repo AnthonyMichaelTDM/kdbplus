@@ -637,7 +637,7 @@ pub fn new_error_os(message: &str) -> *const K {
 /// # Example
 /// ```no_run
 /// use kdbplus::*;
-/// use kdbplus::api::*;
+/// use kdbplus::rusty-api::*;
 ///
 /// extern "C" fn no_panick(func: *const K, args: K) -> *const K{
 ///   let result=unsafe{error_to_string(apply(func, args))};
@@ -682,7 +682,7 @@ pub unsafe fn error_to_string(error: *const K) -> *const K {
 /// # Examples
 /// ```no_run
 /// use kdbplus::*;
-/// use kdbplus::api::*;
+/// use kdbplus::rusty-api::*;
 ///
 /// fn love_even(arg: *const K) -> *const K{
 ///   if let Ok(int) = arg.get_int(){
@@ -785,7 +785,7 @@ pub unsafe fn enumerate(string: S) -> S {
 ///  lists as its elements.
 /// ```no_run
 /// use kdbplus::str_to_S;
-/// use kdbplus::api::*;
+/// use kdbplus::rusty-api::*;
 /// use kdbplus::qtype;
 ///
 /// #[no_mangle]
@@ -793,8 +793,8 @@ pub unsafe fn enumerate(string: S) -> S {
 ///   // Build keys
 ///   let keys=new_list(qtype::SYMBOL_LIST, 2);
 ///   let keys_slice=unsafe{keys.as_mut_slice::<S>()};
-///   keys_slice[0]=unsafe{enumerate(str_to_S!("time"))};
-///   keys_slice[1]=unsafe{enumerate_n(str_to_S!("temperature_and_humidity"), 11)};
+///   keys_slice[0]=unsafe{enumerate(str_to_S("time"))};
+///   keys_slice[1]=unsafe{enumerate_n(str_to_S("temperature_and_humidity"), 11)};
 ///   
 ///   // Build values
 ///   let values=new_list(qtype::COMPOUND_LIST, 2);
@@ -830,26 +830,30 @@ pub unsafe fn flip(dictionary: *const K) -> *const K {
 /// Constructor of simple q table object from a q keyed table object.
 /// # Example
 /// ```no_run
-/// use kdbplus::str_to_S;
-/// use kdbplus::api::*;
+/// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::{KVal, KData};
 /// use kdbplus::qtype;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_table2(_: *const K) -> *const K{
 ///   // Build keys
-///   let keys=new_list(qtype::SYMBOL_LIST, 2);
-///   let keys_slice=unsafe{keys.as_mut_slice::<S>()};
-///   keys_slice[0]=enumerate(str_to_S!("time"));
-///   keys_slice[1]=enumerate_n(str_to_S!("temperature_and_humidity"), 11);
+///   let keys = KVal::Symbol(KData::List(&mut [
+///     unsafe { enumerate(str_to_S("time")) },
+///     unsafe { enumerate_n(str_to_S("temperature_and_humidity"),11) },
+///   ])).to_k();
 ///   
 ///   // Build values
-///   let values=new_list(qtype::COMPOUND_LIST, 2);
-///   let time=new_list(qtype::TIMESTAMP_LIST, 3);
+///   let time = KVal::Timestamp(KData::List(
+///     &mut [119067859167018272_i64, 201766609419710368, 271897944018691392]
+///   )).to_k().cast_mut();
 ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
-///   unsafe{time.as_mut_slice::<J>()}.copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
-///   let temperature=new_list(qtype::FLOAT_LIST, 3);
-///   unsafe{temperature.as_mut_slice::<F>()}.copy_from_slice(&[22.1_f64, 24.7, 30.5]);
-///   unsafe{values.as_mut_slice::<K>()}.copy_from_slice(&[time, temperature]);
+///   let temperature = KVal::Float(KData::List(
+///     &mut [22.1_f64, 24.7, 30.5]
+///   )).to_k().cast_mut();
+///
+///   let values = KVal::CompoundList(
+///     &mut [time, temperature]
+///   ).to_k();
 ///   
 ///   unsafe{flip(new_dictionary(keys, values))}
 /// }
@@ -890,8 +894,7 @@ pub unsafe fn unkey(keyed_table: *const K) -> *const K {
 /// - `n`: The number of key columns from the left.
 /// # Example
 /// ```no_run
-/// use kdbplus::str_to_S;
-/// use kdbplus::api::*;
+/// use kdbplus::rusty_api::*;
 /// use kdbplus::qtype;
 ///
 /// #[no_mangle]
@@ -899,8 +902,8 @@ pub unsafe fn unkey(keyed_table: *const K) -> *const K {
 ///   // Build keys
 ///   let keys=new_list(qtype::SYMBOL_LIST, 2);
 ///   let keys_slice=unsafe{keys.as_mut_slice::<S>()};
-///   keys_slice[0]=unsafe{enumerate(str_to_S!("time"))};
-///   keys_slice[1]=unsafe{enumerate_n(str_to_S!("temperature_and_humidity"), 11)};
+///   keys_slice[0]=unsafe{enumerate(str_to_S("time"))};
+///   keys_slice[1]=unsafe{enumerate_n(str_to_S("temperature_and_humidity"), 11)};
 ///   
 ///   // Build values
 ///   let values=new_list(qtype::COMPOUND_LIST, 2);
@@ -950,10 +953,10 @@ pub unsafe fn enkey(table: *const K, n: J) -> *const K {
 ///  q side. See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
 /// # Example
 /// ```no_run
-/// use kdbplus::api::*;
+/// use kdbplus::rusty-api::*;
 ///
 /// #[no_mangle]
-/// pub extern "C" fn agriculture(_: *const K)->K{
+/// pub extern "C" fn agriculture(_: *const K) -> *const K {
 ///   // Produce an apple.
 ///   let fruit=new_symbol("apple");
 ///   // Sow the apple seed.
@@ -981,8 +984,6 @@ pub unsafe fn decrement_reference_count(qobject: *const K) -> V {
 ///  See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
 /// # Example
 /// ```no_run
-/// #[macro_use]
-/// extern crate kdbplus;
 /// use kdbplus::rusty_api::*;
 ///
 /// fn eat(apple: *const K){
@@ -1054,22 +1055,21 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 
 /// Register callback to the associated kdb+ socket.
 /// ```no_run
-/// #[macro_use]
-/// extern crate kdbplus;
 /// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::{KVal, KData};
 /// use kdbplus::qtype;
 ///
 /// static mut PIPE:[I; 2]=[-1, -1];
 ///
 /// // Callback for some message queue.
-/// extern "C" fn callback(socket: I)->K{
-///   let mut buffer: [K; 1]=[0 as K];
+/// extern "C" fn callback(socket: I) -> *const K {
+///   let mut buffer: [*mut K; 1]=[0 as *mut K];
 ///   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
 ///   // Call `shout` function on q side with the received data.
-///   let result=error_to_string(unsafe{native::k(0, str_to_S("shout"), buffer[0], KNULL)});
-///   if result.get_type() == qtype::ERROR{
-///     eprintln!("Execution error: {}", result.get_symbol().unwrap());
-///     decrement_reference_count(result);
+///   let result=unsafe { error_to_string(unsafe{native::k(0, str_to_S("shout"), buffer[0], KNULL)}) }.cast_mut();
+///   if let KVal::Err(&mut err_str) = KVal::from(unsafe{&mut *result}) {
+///     eprintln!("Execution error: {}", unsafe { S_to_str(err_str) });
+///     unsafe { decrement_reference_count(result) };
 ///   };
 ///   KNULL
 /// }
@@ -1085,11 +1085,13 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 ///   // Lock symbol in a worker thread.
 ///   pin_symbol();
 ///   let handle=std::thread::spawn(move ||{
-///     let mut precious=new_list(qtype::SYMBOL_LIST, 3);
-///     let precious_array=precious.as_mut_slice::<S>();
-///     precious_array[0]=enumerate(null_terminated_str_to_S("belief\0"));
-///     precious_array[1]=enumerate(null_terminated_str_to_S("love\0"));
-///     precious_array[2]=enumerate(null_terminated_str_to_S("hope\0"));
+///     let precious=new_list(qtype::SYMBOL_LIST, 3).cast_mut();
+///     let KVal::Symbol(KData::List(precious_array)) = KVal::from(unsafe{&mut *precious}) else {
+///         unimplemented!()
+///     };
+///     precious_array[0]= unsafe { enumerate(null_terminated_str_to_S("belief\0")) };
+///     precious_array[1]= unsafe { enumerate(null_terminated_str_to_S("love\0")) };
+///     precious_array[2]= unsafe { enumerate(null_terminated_str_to_S("hope\0")) };
 ///     unsafe{libc::write(PIPE[1], std::mem::transmute::<*mut K, *mut V>(precious), 8)};
 ///   });
 ///   handle.join().unwrap();
@@ -1176,8 +1178,6 @@ pub unsafe fn drop_q_object(obj: *const K) -> *const K {
 /// - `n`: The number of arguments for the function.
 /// # Example
 /// ```no_run
-/// #[macro_use]
-/// extern crate kdbplus;
 /// use kdbplus::rusty_api::*;
 /// use kdbplus::qtype;
 ///
@@ -1236,7 +1236,7 @@ pub unsafe fn drop_q_object(obj: *const K) -> *const K {
 ///
 /// /// Example of `load_as_q_function`.
 /// #[no_mangle]
-/// pub extern "C" fn probe(planet: *const K)->K{
+/// pub extern "C" fn probe(planet: *const K) -> *const K {
 ///   // Return monadic function
 ///   unsafe{native::k(0, str_to_S("{[func; planet] func[planet]}"), load_as_q_function(invade as *const V, 2), planet, KNULL)}
 /// }
@@ -1296,20 +1296,26 @@ pub fn days_to_ymd(days: I) -> I {
 /// ```no_run
 /// use kdbplus::*;
 /// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::{KVal, KData};
 ///
 /// #[no_mangle]
-/// pub extern "C" fn drift(_: *const K)->K{
-///   let simple=new_list(qtype::INT_LIST, 2);
-///   simple.as_mut_slice::<I>().copy_from_slice(&[12, 34]);
-///   let extra=new_list(qtype::COMPOUND_LIST, 2);
-///   extra.as_mut_slice::<K>().copy_from_slice(&[new_symbol("vague"), new_int(-3000)]);
-///   // Convert an integer list into a compound list
+/// pub extern "C" fn drift(_: *const K) -> *const K {
+///   // you can also just make the compound list directly
+///   let simple = KVal::Int(KData::List(
+///     &mut [12, 34]
+///   )).to_k();
+///   
+///   let extra=KVal::CompoundList(
+///     &mut [KVal::Symbol(KData::Symbol("vague")).to_k(), KVal::Int(KData::Int(-3000)).to_k()]
+///   );
+///
+///   // Convert an integer list into a compound list:
 ///   let mut compound = unsafe {simple_to_compound(simple, "")};
-///   compound.append(extra).unwrap()
+///   unsafe { compound.append(extra) }.unwrap()
 /// }
 ///
 /// #[no_mangle]
-/// pub extern "C" fn drift2(_: *const K)->K{
+/// pub extern "C" fn drift2(_: *const K) -> *const K {
 ///   let simple=new_list(qtype::ENUM_LIST, 2);
 ///   simple.as_mut_slice::<J>().copy_from_slice(&[0_i64, 1]);
 ///   // Convert an enum indices into a compound list while creating enum values from the indices which are tied with
@@ -1353,11 +1359,11 @@ pub unsafe fn simple_to_compound(simple: *const K, enum_source: &str) -> *const 
         return KNULL;
     }
     // safe because we previously check if simple is a null pointer
-    let simple = unsafe { simple.as_ref() }.unwrap();
-    // unsafe { &*simple };
+    let simple = unsafe { simple.cast_mut().as_mut() }.unwrap();
+    // let simple = unsafe { &mut *simple };
 
     // make sure simple points to a list of some sort (excluding compound lists)
-    if simple.is_list() {
+    if !simple.is_list() {
         return new_error("not a simple list\0");
     }
     // this is safe because we've already checked that simple is a list, and isn't a null pointer
