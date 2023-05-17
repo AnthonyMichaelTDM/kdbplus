@@ -61,21 +61,25 @@ macro_rules! impl_safe_cast_for {
             fn cast<'a>(inner: k_inner) -> &'a mut Self {
                 // get a pointer to the start of the block of memory used by the union
                 let ptr = unsafe { &inner.byte_array as *const u8 };
-                // cast the pointer to a pointer of the correct type, then dereference it
-                let ptr = ptr as *mut Self;
                 if ptr.is_null() {
                     unimplemented!()
                 }
+                // cast the pointer to a pointer of the correct type, then dereference it
+                let ptr = ptr as *mut Self;
                 unsafe { &mut *ptr }
             }
 
             #[inline]
             fn cast_with_ptr_offset<'a>(inner: k_inner) -> &'a mut Self {
-                // TODO: make robust
                 // get a pointer to the start of the block of memory used by the union
                 let ptr = unsafe { &inner.byte_array as *const u8 };
-                // cast the pointer to a pointer of the correct type, then dereference it
-                unsafe { &mut *(ptr.add(std::mem::size_of::<usize>()) as *mut Self) }
+                if ptr.is_null() {
+                    unimplemented!()
+                }
+                // cast the pointer to a pointer of the correct type
+                let ptr = unsafe { ptr.add(std::mem::size_of::<usize>()) } as *mut Self;
+                // then dereference it
+                unsafe { &mut *ptr }
                 // unsafe { &mut *((ptr as *const usize).offset(1) as *mut Self) }
             }
         }
@@ -236,7 +240,7 @@ impl K {
 
     #[inline]
     /// Derefer `K` as a mutable slice of the specified type. The supported types are:
-    /// - `K` (* K): Equivalent to C API macro `kK`.
+    /// - `K` (*mut K): Equivalent to C API macro `kK`.
     /// - `G` (c_uchar): Equivalent to C API macro `kG`.
     /// - `H`: Equivalent to C API macro `kH`.
     /// - `I`: Equivalent to C API macro `kI`.
