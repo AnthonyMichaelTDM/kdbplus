@@ -283,73 +283,74 @@ impl<'a> KVal<'a> {
     /// acheives same functionality as [`push`](crate::api::KUtility::push) and [`append`](crate::api::KUtility::append)
     /// 
     /// * in cases of errror, the error string will be null-terminated
-    /// * will mutate self (except in error cases), causing self's inner Cow to be converted to it's owned variant (usually by cloning)
+    /// * will mutate base (except in error cases), causing base's inner Cow to be converted to it's owned variant (usually by cloning)
     /// * consumes other
-    /// * order will always be [self[..], other[..]]
+    /// * order will always be [base[..], other[..]]
     /// 
     /// # Side Effects
-    /// * self will be mutated
+    /// * takes ownership of base, mutates it, returns it.
+    /// * base will be mutated
     /// * other will be consumed
     /// 
     /// # Errors
-    /// * if self and other are not the same type (ie Int or Long)
-    /// * if self is a simple list and other is a compound list
-    /// * if self or other are: Err, Null, Char, String, Table, Dictionary, Foreign, or SortedDictionary variant
+    /// * if base and other are not the same type (ie Int or Long)
+    /// * if base is a simple list and other is a compound list
+    /// * if base or other are: Err, Null, Char, String, Table, Dictionary, Foreign, or SortedDictionary variant
     /// 
     /// # Note
-    /// behavior depends on variant of self and other
-    /// * if self is an atom, other must be an atom or simple list of the same type, and self will be converted to a list (inner cow will be Owned)
-    /// * if self is a simple list, other must be a simple list or atom of the same type
-    /// * if self is a compound list, other must be a compound list (to combine a compound list with a simple list, use as_compound_list first)
+    /// behavior depends on variant of base and other
+    /// * if base is an atom, other must be an atom or simple list of the same type, and base will be converted to a list (inner cow will be Owned)
+    /// * if base is a simple list, other must be a simple list or atom of the same type
+    /// * if base is a compound list, other must be a compound list (to combine a compound list with a simple list, use as_compound_list first)
     /// 
     /// # Examples
     /// TODO: add some
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn join(&mut self, mut other: Self) -> Result<&'a mut Self, &'static str> {
+    pub fn join(mut base: Self, other: Self) -> Result<Self, &'static str> {
         use KData::*; // for brevity
         use KVal::*; // for brevity
         // private macro to reduce code repition when joining 2 simple KVals (that may be atoms or lists)
         macro_rules! join {
-            ($self:ident, $other:ident, $type:path) => {
-                match ($self,$other) {
-                    (Atom(&self_atom), Atom(&other_atom)) => *self = $type(List(Cow::from(vec![self_atom, other_atom]))),
-                    (Atom(&self_atom), List(other_list)) => {
-                        let mut tmp = vec![self_atom];
+            ($base:ident, $other:ident, $type:path) => {
+                match ($base,$other) {
+                    (Atom(&base_atom), Atom(&other_atom)) => base = $type(List(Cow::from(vec![base_atom, other_atom]))),
+                    (Atom(&base_atom), List(other_list)) => {
+                        let mut tmp = vec![base_atom];
                         tmp.append(&mut other_list.into_owned());
-                        *self = $type(List(Cow::from(tmp)))
+                        base = $type(List(Cow::from(tmp)))
                     },
-                    (List(mut self_list), Atom(&other_atom)) => self_list.into_owned().push(other_atom),
-                    (List(mut self_list), List(mut other_list)) => self_list.into_owned().append(&mut other_list.into_owned()),
+                    (List(base_list), Atom(&other_atom)) => base_list.to_owned().into_owned().push(other_atom),
+                    (List(base_list), List(other_list)) => base_list.to_owned().into_owned().append(&mut other_list.into_owned()),
                 }
             };
         }
-        // append other to self, or return error
-        match (self, other) {
-            (CompoundList(self_data), CompoundList(mut other_data)) => {
-                self_data.append(&mut other_data);
+        // append other to base, or return error
+        match (&mut base, other) {
+            (CompoundList(base_data), CompoundList(mut other_data)) => {
+                base_data.append(&mut other_data);
             },
-            (Bool(self_data), Bool(other_data)) => join!(self_data, other_data, KVal::Bool),
-            (Guid(self_data), Guid(other_data)) => join!(self_data, other_data, KVal::Guid),
-            (Byte(self_data), Byte(other_data)) => join!(self_data, other_data, KVal::Byte),
-            (Short(self_data), Short(other_data)) => join!(self_data, other_data, KVal::Short),
-            (Int(self_data), Int(other_data)) => join!(self_data, other_data, KVal::Int),
-            (Long(self_data), Long(other_data)) => join!(self_data, other_data, KVal::Long),
-            (Real(self_data), Real(other_data)) => join!(self_data, other_data, KVal::Real),
-            (Float(self_data), Float(other_data)) => join!(self_data, other_data, KVal::Float),
-            (Symbol(self_data), Symbol(other_data)) => join!(self_data, other_data, KVal::Symbol),
-            (Timestamp(self_data), Timestamp(other_data)) => join!(self_data, other_data, KVal::Timestamp),
-            (Month(self_data), Month(other_data)) => join!(self_data, other_data, KVal::Month),
-            (Date(self_data), Date(other_data)) => join!(self_data, other_data, KVal::Date),
-            (Datetime(self_data), Datetime(other_data)) => join!(self_data, other_data, KVal::Datetime),
-            (Timespan(self_data), Timespan(other_data)) => join!(self_data, other_data, KVal::Timespan),
-            (Minute(self_data), Minute(other_data)) => join!(self_data, other_data, KVal::Minute),
-            (Second(self_data), Second(other_data)) => join!(self_data, other_data, KVal::Second),
-            (Time(self_data), Time(other_data)) => join!(self_data, other_data, KVal::Time),
-            (Enum(self_data), Enum(other_data)) => join!(self_data, other_data, KVal::Enum),
+            (Bool(base_data), Bool(other_data)) => join!(base_data, other_data, KVal::Bool),
+            (Guid(base_data), Guid(other_data)) => join!(base_data, other_data, KVal::Guid),
+            (Byte(base_data), Byte(other_data)) => join!(base_data, other_data, KVal::Byte),
+            (Short(base_data), Short(other_data)) => join!(base_data, other_data, KVal::Short),
+            (Int(base_data), Int(other_data)) => join!(base_data, other_data, KVal::Int),
+            (Long(base_data), Long(other_data)) => join!(base_data, other_data, KVal::Long),
+            (Real(base_data), Real(other_data)) => join!(base_data, other_data, KVal::Real),
+            (Float(base_data), Float(other_data)) => join!(base_data, other_data, KVal::Float),
+            (Symbol(base_data), Symbol(other_data)) => join!(base_data, other_data, KVal::Symbol),
+            (Timestamp(base_data), Timestamp(other_data)) => join!(base_data, other_data, KVal::Timestamp),
+            (Month(base_data), Month(other_data)) => join!(base_data, other_data, KVal::Month),
+            (Date(base_data), Date(other_data)) => join!(base_data, other_data, KVal::Date),
+            (Datetime(base_data), Datetime(other_data)) => join!(base_data, other_data, KVal::Datetime),
+            (Timespan(base_data), Timespan(other_data)) => join!(base_data, other_data, KVal::Timespan),
+            (Minute(base_data), Minute(other_data)) => join!(base_data, other_data, KVal::Minute),
+            (Second(base_data), Second(other_data)) => join!(base_data, other_data, KVal::Second),
+            (Time(base_data), Time(other_data)) => join!(base_data, other_data, KVal::Time),
+            (Enum(base_data), Enum(other_data)) => join!(base_data, other_data, KVal::Enum),
             _ => return Result::Err("invalid types\0"),
         }
-        // if we get here, there was not an error, return self
-        Ok(self)
+        // if we get here, there was not an error, return base
+        Ok(base)
     }
 
     /// Convert this value back into a K value,
