@@ -59,5 +59,12 @@ libc = "0.2"
 # DocTests
 tokio-test = "0.4"
 
+[build-dependencies]
+rustc_version = "0.4"
+
+# docs.rs-specific configuration
 [package.metadata.docs.rs]
+# document all features
 all-features = true
+# defines the configuration attribute `docsrs`
+rustdoc-args = ["--cfg", "docsrs"]
