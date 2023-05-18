@@ -2,18 +2,23 @@
 // >> Structs
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
+use std::borrow::Cow;
 use super::{re_exports, SafeToCastFromKInner, K, KNULL, S};
 use crate::qtype;
 
 /// Rust friendly wrapper for q Atoms and Lists.
 /// references are mutable to indicate that changes should propagate back to q.
 #[derive(Debug)]
-pub enum KData<'a, T> {
+pub enum KData<'a, T> 
+where T: 'a + std::fmt::Debug + SafeToCastFromKInner,
+ [T]: 'a + ToOwned<Owned = Vec<T>> 
+{
     Atom(&'a T),   // TODO: Should this be mut, const, or neither?
-    List(&'a [T]), // TODO: Should this be mut, const, or neither?
+    //List(&'a [T]), // TODO: Should this be mut, const, or neither?
+    List(Cow<'a, [T]>)
 }
 
-impl<'a, T: 'a + std::fmt::Debug + SafeToCastFromKInner> KData<'a, T> {
+impl<'a, T: 'a + std::fmt::Debug + SafeToCastFromKInner + std::clone::Clone> KData<'a, T> {
     #[inline]
     /// # Safety
     /// k must be a valid pointer to a valid K object
@@ -32,7 +37,7 @@ impl<'a, T: 'a + std::fmt::Debug + SafeToCastFromKInner> KData<'a, T> {
     /// same as [`K::as_slice`](type.K.html#method.as_slice)
     /// but, additionally k must be a list of type T
     fn list(k: &'a K) -> KData<'a, T> {
-        KData::List(k.as_slice().unwrap())
+        KData::List(Cow::from(k.as_slice().unwrap()))
     }
 }
 
@@ -191,6 +196,32 @@ impl<'a> From<&'a K> for KVal<'a> {
     }
 }
 
+// private macro to reduce repition in the to_k method when initializing a list
+macro_rules! list_to_k {
+    ($slice_type:ty, $new_list_type:expr,$from_list:expr) => {
+        {
+            // create new k list with the same length as from_list
+            let k = re_exports::new_list($new_list_type, $from_list.len().try_into().unwrap()).cast_mut();
+            // copy elements over
+            unsafe { &mut *k }
+                .as_mut_slice::<$slice_type>()
+                .unwrap()
+                .copy_from_slice(&$from_list);
+            k.cast_const()
+        }
+    }
+}
+// private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
+macro_rules! list_to_compound_list {
+    ($simple_list:expr,$map_closure:expr) => {
+        KVal::CompoundList(
+            $simple_list.iter()
+                .map($map_closure)
+                .collect::<Vec<_>>(),
+        )
+    };
+}
+
 impl<'a> KVal<'a> {
     /// Convert this KVal into a CompoundList variant
     ///
@@ -232,100 +263,28 @@ impl<'a> KVal<'a> {
         use KData::*;
         use KVal::*;
         match self {
-            Bool(List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_bool(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Guid(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_guid(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Byte(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_byte(atom.into()).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Short(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_short(atom.into()).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Int(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_int(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Long(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_long(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Real(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_real(atom.into()).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Float(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_float(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Symbol(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| unsafe { re_exports::new_symbol_from_S(atom) }.cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Timestamp(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_timestamp(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Month(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_month(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Date(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_date(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Datetime(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_datetime(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Timespan(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_timespan(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Minute(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_minute(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Second(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_second(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
-            Time(KData::List(list)) => CompoundList(
-                list.iter()
-                    .map(|&atom| re_exports::new_time(atom).cast_mut())
-                    .collect::<Vec<_>>(),
-            ),
+            Bool(List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_bool(atom).cast_mut()),
+            Guid(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_guid(atom).cast_mut()),
+            Byte(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_byte(atom.into()).cast_mut()),
+            Short(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_short(atom.into()).cast_mut()),
+            Int(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_int(atom).cast_mut()),
+            Long(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_long(atom).cast_mut()),
+            Real(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_real(atom.into()).cast_mut()),
+            Float(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_float(atom).cast_mut()),
+            Symbol(KData::List(list)) => list_to_compound_list!(list, |&atom| unsafe { re_exports::new_symbol_from_S(atom) }.cast_mut()),
+            Timestamp(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_timestamp(atom).cast_mut()),
+            Month(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_month(atom).cast_mut()),
+            Date(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_date(atom).cast_mut()),
+            Datetime(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_datetime(atom).cast_mut()),
+            Timespan(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_timespan(atom).cast_mut()),
+            Minute(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_minute(atom).cast_mut()),
+            Second(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_second(atom).cast_mut()),
+            Time(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_time(atom).cast_mut()),
             Enum(KData::List(list)) => {
                 let Some(source) = enum_source else {
                     return KVal::from(unsafe {&*re_exports::new_error("Enum list must have exactly one source per atom\0")});
                 };
-                CompoundList(
-                    list.iter()
-                        .map(|&atom| re_exports::new_enum(source, atom).cast_mut())
-                        .collect::<Vec<_>>(),
-                )
+                list_to_compound_list!(list, |&atom| re_exports::new_enum(source, atom).cast_mut())
             }
             _ => KVal::from(unsafe { &*re_exports::new_error("not a simple list\0") }),
         }
@@ -338,200 +297,44 @@ impl<'a> KVal<'a> {
     /// * consumes self, this is deliberate as we don't want multiple references to the same data
     /// * this function should be used to create NEW K objects from manually initialized KVals
     pub fn to_k(self) -> *const K {
-        // TODO: once this wrapper has more control over the memory, decrease the reference count
-        // of the original k object if there is one
-
         match self {
-            KVal::CompoundList(list) => {
-                let k = re_exports::new_list(qtype::COMPOUND_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                // copy the elements over
-                unsafe { &mut *k }
-                    .as_mut_slice::<*mut K>()
-                    .unwrap()
-                    .copy_from_slice(&list);
-                k.cast_const()
-            }
+            KVal::CompoundList(list) => list_to_k!(*mut K, qtype::COMPOUND_LIST, list),
             KVal::Bool(KData::Atom(&atom)) => re_exports::new_bool(atom),
-            KVal::Bool(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::BOOL_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Bool(KData::List(list)) => list_to_k!(i32, qtype::BOOL_LIST, list),
             KVal::Guid(KData::Atom(&atom)) => re_exports::new_guid(atom),
-            KVal::Guid(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::GUID_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<[u8; 16]>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Guid(KData::List(list)) => list_to_k!([u8; 16], qtype::GUID_LIST, list),
             KVal::Byte(KData::Atom(&atom)) => re_exports::new_byte(atom.into()),
-            KVal::Byte(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::BYTE_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<u8>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Byte(KData::List(list)) => list_to_k!(u8, qtype::BYTE_LIST, list),
             KVal::Short(KData::Atom(&atom)) => re_exports::new_short(atom.into()),
-            KVal::Short(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::SHORT_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i16>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Short(KData::List(list)) => list_to_k!(i16, qtype::SHORT_LIST, list),
             KVal::Int(KData::Atom(&atom)) => re_exports::new_int(atom),
-            KVal::Int(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::INT_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Int(KData::List(list)) => list_to_k!(i32  , qtype::INT_LIST, list),
             KVal::Long(KData::Atom(&atom)) => re_exports::new_long(atom),
-            KVal::Long(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::LONG_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i64>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Long(KData::List(list)) => list_to_k!(i64, qtype::LONG_LIST, list),
             KVal::Real(KData::Atom(&atom)) => re_exports::new_real(atom.into()),
-            KVal::Real(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::REAL_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<f32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Real(KData::List(list)) => list_to_k!(f32, qtype::REAL_LIST, list),
             KVal::Float(KData::Atom(&atom)) => re_exports::new_float(atom),
-            KVal::Float(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::FLOAT_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<f64>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Float(KData::List(list)) => list_to_k!(f64, qtype::FLOAT_LIST, list),
             KVal::Symbol(KData::Atom(&atom)) => unsafe { re_exports::new_symbol_from_S(atom) },
-            KVal::Symbol(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::SYMBOL_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<S>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Symbol(KData::List(list)) => list_to_k!(S, qtype::SYMBOL_LIST, list),
             KVal::Timestamp(KData::Atom(&atom)) => re_exports::new_timestamp(atom),
-            KVal::Timestamp(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::TIMESTAMP_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i64>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Timestamp(KData::List(list)) => list_to_k!(i64, qtype::TIMESTAMP_LIST, list),
             KVal::Month(KData::Atom(&atom)) => re_exports::new_month(atom),
-            KVal::Month(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::MONTH_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Month(KData::List(list)) =>  list_to_k!(i32, qtype::MONTH_LIST, list),
             KVal::Date(KData::Atom(&atom)) => re_exports::new_date(atom),
-            KVal::Date(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::DATE_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Date(KData::List(list)) => list_to_k!(i32, qtype::DATE_LIST, list),
             KVal::Datetime(KData::Atom(&atom)) => re_exports::new_datetime(atom),
-            KVal::Datetime(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::DATETIME_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<f64>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Datetime(KData::List(list)) => list_to_k!(f64, qtype::DATETIME_LIST, list),
             KVal::Timespan(KData::Atom(&atom)) => re_exports::new_timespan(atom),
-            KVal::Timespan(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::TIMESPAN_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i64>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Timespan(KData::List(list)) => list_to_k!(i64, qtype::TIMESPAN_LIST, list),
             KVal::Minute(KData::Atom(&atom)) => re_exports::new_minute(atom),
-            KVal::Minute(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::MINUTE_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Minute(KData::List(list)) => list_to_k!(i32, qtype::MINUTE_LIST, list),
             KVal::Second(KData::Atom(&atom)) => re_exports::new_second(atom),
-            KVal::Second(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::SECOND_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Second(KData::List(list)) => list_to_k!(i32, qtype::SECOND_LIST, list),
             KVal::Time(KData::Atom(&atom)) => re_exports::new_time(atom),
-            KVal::Time(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::TIME_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i32>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
-            KVal::Enum(KData::Atom(_)) => unimplemented!("pass an enum source to the macro"),
-            KVal::Enum(KData::List(list)) => {
-                let k = re_exports::new_list(qtype::ENUM_LIST, list.len().try_into().unwrap())
-                    .cast_mut();
-                unsafe { &mut *k }
-                    .as_mut_slice::<i64>()
-                    .unwrap()
-                    .copy_from_slice(list);
-                k.cast_const()
-            }
+            KVal::Time(KData::List(list)) => list_to_k!(i32, qtype::TIME_LIST, list),
+            KVal::Enum(KData::Atom(_)) => unimplemented!("pass an enum source to the to_k! macro"),
+            KVal::Enum(KData::List(list)) => list_to_k!(i64, qtype::ENUM_LIST, list),
             KVal::Char(&atom) => re_exports::new_char(atom as char),
             KVal::String(&list) => unsafe { re_exports::new_string_from_S(list) },
             KVal::Err(&err) => unsafe { re_exports::new_error_from_S(err) },
