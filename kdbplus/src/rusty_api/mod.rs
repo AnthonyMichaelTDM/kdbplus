@@ -194,6 +194,8 @@ pub union k_inner {
     pub list: KList,
     /// utility for accessing raw bytes
     pub byte_array: [u8; 16],
+    /// char type holder.
+    pub char: C,
 }
 
 impl_safe_cast_for!(G);
@@ -206,6 +208,7 @@ impl_safe_cast_for!(S);
 impl_safe_cast_for!(*mut K);
 impl_safe_cast_for!(KList);
 impl_safe_cast_for!([u8; 16]);
+impl_safe_cast_for!(C);
 
 /// Underlying struct of raw `K` object.
 #[repr(C)]

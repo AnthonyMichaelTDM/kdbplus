@@ -3,6 +3,7 @@
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 use std::borrow::Cow;
+use super::C;
 use super::{re_exports, SafeToCastFromKInner, K, KNULL, S};
 use crate::qtype;
 
@@ -65,8 +66,8 @@ pub enum KVal<'a> {
     Real(KData<'a, f32>),
     /// Note: the C api uses [`F`] (f64) for floats. we use f64 in Rust.
     Float(KData<'a, f64>),
-    /// Note: the C api uses [`I`] (i32) for chars. we use u8 (c_uchar) in Rust https://github.com/KxSystems/kdb/blob/bbc40b8cb870948122a36cb80a486bc5f7e470d7/c/c/k.h#L29.
-    Char(&'a u8),
+    /// Note: the C api uses [`I`] (i32) for chars. we use [`libc::c_char`] in Rust https://github.com/KxSystems/kdb/blob/bbc40b8cb870948122a36cb80a486bc5f7e470d7/c/c/k.h#L29.
+    Char(&'a C),
     /// Note: the C api uses [`S`] (*mut c_char) for symbols. we use the same in Rust to avoid unecessary unsafety.
     Symbol(KData<'a, S>),
     /// Note: the C api uses [`J`] (i64) for timestamps. we use i64 in Rust.
@@ -418,7 +419,7 @@ impl<'a> KVal<'a> {
             KVal::Time(KData::List(list)) => list_to_k!(i32, qtype::TIME_LIST, list),
             KVal::Enum(KData::Atom(_)) => unimplemented!("pass an enum source to the to_k! macro"),
             KVal::Enum(KData::List(list)) => list_to_k!(i64, qtype::ENUM_LIST, list),
-            KVal::Char(&atom) => re_exports::new_char(atom as char),
+            KVal::Char(&atom) => re_exports::new_char(atom as u8 as char),
             KVal::String(&list) => unsafe { re_exports::new_string_from_S(list) },
             KVal::Err(&err) => unsafe { re_exports::new_error_from_S(err) },
             KVal::Null => KNULL,
