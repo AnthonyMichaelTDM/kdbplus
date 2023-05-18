@@ -143,6 +143,7 @@ impl<'a> From<&'a K> for KVal<'a> {
     ///   * treat k as if it's been moved into this function, because it effectively has been.
     ///   * you should not try to mutate the value of the returned KVal as a way to change the
     ///     underlying k object, q is a functional language so functions should not have side effects.
+    #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
     fn from(k: &'a K) -> KVal<'a> {
         match k.qtype {
             /* -128 */ qtype::ERROR => KVal::Err(k.cast()),
@@ -196,39 +197,15 @@ impl<'a> From<&'a K> for KVal<'a> {
     }
 }
 
-// private macro to reduce repition in the to_k method when initializing a list
-macro_rules! list_to_k {
-    ($slice_type:ty, $new_list_type:expr,$from_list:expr) => {
-        {
-            // create new k list with the same length as from_list
-            let k = re_exports::new_list($new_list_type, $from_list.len().try_into().unwrap()).cast_mut();
-            // copy elements over
-            unsafe { &mut *k }
-                .as_mut_slice::<$slice_type>()
-                .unwrap()
-                .copy_from_slice(&$from_list);
-            k.cast_const()
-        }
-    }
-}
-// private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
-macro_rules! list_to_compound_list {
-    ($simple_list:expr,$map_closure:expr) => {
-        KVal::CompoundList(
-            $simple_list.iter()
-                .map($map_closure)
-                .collect::<Vec<_>>(),
-        )
-    };
-}
-
 impl<'a> KVal<'a> {
-    /// Convert this KVal into a CompoundList variant
+    /// Create a CompoundList Variant from this KVal 
     ///
+    /// in cases of an error, the error string will be null-terminated
+    /// 
     /// port of [`simple_to_compound`](crate::api::simple_to_compound)
     ///
     /// # Examples
-    ///
+    /// TODO: add some
     /// ```q
     /// q)drift: LIBPATH_ (`drift; 1);
     /// q)drift2: LIBPATH_ (`drift2; 1);
@@ -250,7 +227,7 @@ impl<'a> KVal<'a> {
     /// * creates new k objects when necessary
     /// * if the KVal is an Enum List, enum_source must be provided
     /// * if the KVal is already a CompoundList variant, it will be returned as is
-    /// * if the KVal is a simple list, it's contants will be converted to k objects and placed in a new CompoundList
+    /// * if the KVal is a simple list, it's contents will be converted to k objects and placed in a new CompoundList
     /// * if KVal is not a list, an error will be returned
     /// * Enum elements from different enum sources must be contained in a compound list. Therefore
     ///   this function intentionally restricts the number of enum sources to one so that user switches
@@ -258,10 +235,21 @@ impl<'a> KVal<'a> {
     ///
     /// # Safety
     /// enum_source must be able to be converted to a C string (i.e. no null bytes)
-    #[inline]
-    pub fn as_compound_list(&'a self, enum_source: Option<&'a str>) -> KVal<'a> {
-        use KData::*;
-        use KVal::*;
+    #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
+    pub fn as_compound_list(&'a self, enum_source: Option<&'a str>) -> Result<KVal<'a>, &'static str> {
+        // private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
+        macro_rules! list_to_compound_list {
+            ($simple_list:ident,$map_closure:expr) => {
+                Ok(KVal::CompoundList(
+                    $simple_list.iter()
+                        .map($map_closure)
+                        .collect::<Vec<_>>(),
+                ))
+            };
+        }
+
+        use KData::*; // for brevity
+        use KVal::*; // for brevity
         match self {
             Bool(List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_bool(atom).cast_mut()),
             Guid(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_guid(atom).cast_mut()),
@@ -282,12 +270,86 @@ impl<'a> KVal<'a> {
             Time(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_time(atom).cast_mut()),
             Enum(KData::List(list)) => {
                 let Some(source) = enum_source else {
-                    return KVal::from(unsafe {&*re_exports::new_error("Enum list must have exactly one source per atom\0")});
+                    return Result::Err("Enum list must have exactly one source per atom\0");
                 };
                 list_to_compound_list!(list, |&atom| re_exports::new_enum(source, atom).cast_mut())
             }
-            _ => KVal::from(unsafe { &*re_exports::new_error("not a simple list\0") }),
+            _ => Result::Err("self is not a simple list\0"),
         }
+    }
+
+    /// Join two KVals together
+    /// 
+    /// acheives same functionality as [`push`](crate::api::KUtility::push) and [`append`](crate::api::KUtility::append)
+    /// 
+    /// * in cases of errror, the error string will be null-terminated
+    /// * will mutate self (except in error cases), causing self's inner Cow to be converted to it's owned variant (usually by cloning)
+    /// * consumes other
+    /// * order will always be [self[..], other[..]]
+    /// 
+    /// # Side Effects
+    /// * self will be mutated
+    /// * other will be consumed
+    /// 
+    /// # Errors
+    /// * if self and other are not the same type (ie Int or Long)
+    /// * if self is a simple list and other is a compound list
+    /// * if self or other are: Err, Null, Char, String, Table, Dictionary, Foreign, or SortedDictionary variant
+    /// 
+    /// # Note
+    /// behavior depends on variant of self and other
+    /// * if self is an atom, other must be an atom or simple list of the same type, and self will be converted to a list (inner cow will be Owned)
+    /// * if self is a simple list, other must be a simple list or atom of the same type
+    /// * if self is a compound list, other must be a compound list (to combine a compound list with a simple list, use as_compound_list first)
+    /// 
+    /// # Examples
+    /// TODO: add some
+    #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
+    pub fn join(&mut self, mut other: Self) -> Result<&'a mut Self, &'static str> {
+        use KData::*; // for brevity
+        use KVal::*; // for brevity
+        // private macro to reduce code repition when joining 2 simple KVals (that may be atoms or lists)
+        macro_rules! join {
+            ($self:ident, $other:ident, $type:path) => {
+                match ($self,$other) {
+                    (Atom(&self_atom), Atom(&other_atom)) => *self = $type(List(Cow::from(vec![self_atom, other_atom]))),
+                    (Atom(&self_atom), List(other_list)) => {
+                        let mut tmp = vec![self_atom];
+                        tmp.append(&mut other_list.into_owned());
+                        *self = $type(List(Cow::from(tmp)))
+                    },
+                    (List(mut self_list), Atom(&other_atom)) => self_list.into_owned().push(other_atom),
+                    (List(mut self_list), List(mut other_list)) => self_list.into_owned().append(&mut other_list.into_owned()),
+                }
+            };
+        }
+        // append other to self, or return error
+        match (self, other) {
+            (CompoundList(self_data), CompoundList(mut other_data)) => {
+                self_data.append(&mut other_data);
+            },
+            (Bool(self_data), Bool(other_data)) => join!(self_data, other_data, KVal::Bool),
+            (Guid(self_data), Guid(other_data)) => join!(self_data, other_data, KVal::Guid),
+            (Byte(self_data), Byte(other_data)) => join!(self_data, other_data, KVal::Byte),
+            (Short(self_data), Short(other_data)) => join!(self_data, other_data, KVal::Short),
+            (Int(self_data), Int(other_data)) => join!(self_data, other_data, KVal::Int),
+            (Long(self_data), Long(other_data)) => join!(self_data, other_data, KVal::Long),
+            (Real(self_data), Real(other_data)) => join!(self_data, other_data, KVal::Real),
+            (Float(self_data), Float(other_data)) => join!(self_data, other_data, KVal::Float),
+            (Symbol(self_data), Symbol(other_data)) => join!(self_data, other_data, KVal::Symbol),
+            (Timestamp(self_data), Timestamp(other_data)) => join!(self_data, other_data, KVal::Timestamp),
+            (Month(self_data), Month(other_data)) => join!(self_data, other_data, KVal::Month),
+            (Date(self_data), Date(other_data)) => join!(self_data, other_data, KVal::Date),
+            (Datetime(self_data), Datetime(other_data)) => join!(self_data, other_data, KVal::Datetime),
+            (Timespan(self_data), Timespan(other_data)) => join!(self_data, other_data, KVal::Timespan),
+            (Minute(self_data), Minute(other_data)) => join!(self_data, other_data, KVal::Minute),
+            (Second(self_data), Second(other_data)) => join!(self_data, other_data, KVal::Second),
+            (Time(self_data), Time(other_data)) => join!(self_data, other_data, KVal::Time),
+            (Enum(self_data), Enum(other_data)) => join!(self_data, other_data, KVal::Enum),
+            _ => return Result::Err("invalid types\0"),
+        }
+        // if we get here, there was not an error, return self
+        Ok(self)
     }
 
     /// Convert this value back into a K value,
@@ -296,7 +358,27 @@ impl<'a> KVal<'a> {
     /// * uses methods from the native q api to create NEW K objects from the data in this value.
     /// * consumes self, this is deliberate as we don't want multiple references to the same data
     /// * this function should be used to create NEW K objects from manually initialized KVals
+    /// 
+    /// # Examples
+    /// TODO: add some
+    #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
     pub fn to_k(self) -> *const K {
+        // private macro to reduce repition in the to_k method when initializing a list
+        macro_rules! list_to_k {
+            ($slice_type:ty, $new_list_type:expr,$from_list:ident) => {
+                {
+                    // create new k list with the same length as from_list
+                    let k = re_exports::new_list($new_list_type, $from_list.len().try_into().unwrap()).cast_mut();
+                    // copy elements over
+                    unsafe { &mut *k }
+                        .as_mut_slice::<$slice_type>()
+                        .unwrap()
+                        .copy_from_slice(&$from_list);
+                    k.cast_const()
+                }
+            }
+        }
+
         match self {
             KVal::CompoundList(list) => list_to_k!(*mut K, qtype::COMPOUND_LIST, list),
             KVal::Bool(KData::Atom(&atom)) => re_exports::new_bool(atom),
