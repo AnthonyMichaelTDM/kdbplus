@@ -158,7 +158,10 @@ pub mod qnull_base {
 
     /// Null value of GUID.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -168,7 +171,8 @@ pub mod qnull_base {
       new_guid(qnull_base::U)
     }
     ```
-    "#)]
+    "#
+    )]
     ///```q
     /// q)guid_border: `libapi_examples 2: (`guid_border; 1);
     /// q)guid_border[]
@@ -178,7 +182,10 @@ pub mod qnull_base {
 
     /// Null value of short.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -193,7 +200,8 @@ pub mod qnull_base {
         shorts
     }
     ```
-    "#)]
+    "#
+    )]
     /// ```q
     /// q)short_borders: `libapi_examples 2: (`short_borders; 1);
     /// q)short_borders[]
@@ -203,7 +211,10 @@ pub mod qnull_base {
 
     /// Null value of int family, i.e., int, month, date, minute, second and time.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -218,7 +229,8 @@ pub mod qnull_base {
         ints
     }
     ```
-    "#)]
+    "#
+    )]
     /// ```q
     /// q)int_borders: `libapi_examples 2: (`int_borders; 1);
     /// q)int_borders[]
@@ -228,7 +240,10 @@ pub mod qnull_base {
 
     /// Null value of long family, i.e., long, timestamp and timespan.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -243,7 +258,8 @@ pub mod qnull_base {
         timestamps
     }
     ```
-    "#)]
+    "#
+    )]
     /// ```q
     /// q)timestamp_borders: `libapi_examples 2: (`long_borders; 1);
     /// q)timestamp_borders[]
@@ -253,7 +269,10 @@ pub mod qnull_base {
 
     /// Null value of real.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -268,7 +287,8 @@ pub mod qnull_base {
         reals
     }
     ```
-    "#)]
+    "#
+    )]
     /// ```q
     /// q)real_borders: `libapi_examples 2: (`real_borders; 1);
     /// q)real_borders[]
@@ -278,7 +298,10 @@ pub mod qnull_base {
 
     /// Null value of float family, i.e., float and datetime.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -293,7 +316,8 @@ pub mod qnull_base {
         datetimes
     }
     ```
-    "#)]
+    "#
+    )]
     /// ```q
     /// q)datetime_borders: `libapi_examples 2: (`float_borders; 1);
     /// q)datetime_borders[]
@@ -303,17 +327,15 @@ pub mod qnull_base {
 
     /// Null value of char.
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
-    ```no_run
-    use kdbplus::*;
-    use kdbplus::api::*;
-
-    #[no_mangle]
-    pub extern "C" fn char_border(_: K) -> K{
-      new_char(qnull_base::C)
-    }
-    ```
-    "#)]
+    /// ```no_run
+    /// use kdbplus::*;
+    /// use kdbplus::api::*;
+    ///
+    /// #[no_mangle]
+    /// pub extern "C" fn char_border(_: K) -> K{
+    ///   new_char(qnull_base::C)
+    /// }
+    /// ```
     /// ```q
     /// q)char_border: `libapi_examples 2: (`char_border; 1);
     /// q)char_border[]
@@ -325,7 +347,10 @@ pub mod qnull_base {
 
     /// Null value of string family (symbol, string).
     /// # Example
-    #[cfg_attr(feature = "doc_cfg", doc(cfg(feature = "api")), doc = r#"
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
     ```no_run
     use kdbplus::*;
     use kdbplus::api::*;
@@ -339,7 +364,8 @@ pub mod qnull_base {
         compound
     }
     ```
-    "#)]
+    "#
+    )]
     /// ```q
     /// q)string_borders: `libapi_examples 2: (`string_borders; 1);
     /// q)string_borders[]
@@ -349,7 +375,7 @@ pub mod qnull_base {
     /// 1b
     /// `boolean$()
     /// ```
-    pub const S: &'static str = "";
+    pub const S: &str = "";
 }
 
 pub mod qinf_base {
@@ -425,7 +451,9 @@ compile_error!("feature \"rusty-api\" and \"api\" are mutually exclusive");
 #[cfg(not(any(feature = "rusty-api", feature = "api", feature = "ipc")))]
 compile_error!("feature \"rusty-api\" or \"api\" or \"ipc\" must be enabled");
 
-#[cfg(feature = "api")]
+// technically, just #[cfg(feature = "api")] is enough but this so that the LSP server
+// won't complain about conflicting macro definitions
+#[cfg(all(feature = "api", not(feature = "rusty-api")))]
 pub mod api;
 
 #[cfg(feature = "rusty-api")]

@@ -1,5 +1,5 @@
 [package]
-name = "rusty_api_example"
+name = "rusty_api_examples"
 version = "0.1.0"
 edition = "2021"
 authors = ["Anthony Rubick"]
