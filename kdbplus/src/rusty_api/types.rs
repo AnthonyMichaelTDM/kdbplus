@@ -206,6 +206,23 @@ impl<'a> From<&'a K> for KVal<'a> {
 }
 
 impl<'a> KVal<'a> {
+    /// Create a new KVal from a K object
+    ///
+    /// dereferences a raw pointer.
+    ///
+    /// # Safety
+    /// * passed K object must be a valid pointer
+    ///   * the only way to guaruntee this is to only pass K objects that are given from the q instance calling your function,
+    ///     or those created by native api functions.
+    #[inline]
+    #[allow(clippy::not_unsafe_ptr_arg_deref)] // we can say that this is safe because K objects can only come from the q instance or native api functions, which both guaruntee that the pointer is valid
+    pub fn from_raw(k: *const K) -> Self {
+        match unsafe { k.as_ref() } {
+            Some(k) => Self::from(k),
+            None => Self::Null,
+        }
+    }
+
     /// Create a CompoundList Variant from this KVal
     ///
     /// takes ownership of self, and returns it or a new KVal
