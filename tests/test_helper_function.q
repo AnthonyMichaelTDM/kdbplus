@@ -35,7 +35,7 @@ ASSERT_EQ:{[test_name; lhs; rhs]
     [
       FAILED__+:1;
       `.test.MODULES__ insert (enlist test_name; 1b); 
-      message:"assertion failed.\n\tleft:", (-3!lhs), "\n\tright:", -3!rhs;
+      message:"assertion failed:\t",test_name,"\n\tleft:", (-3!lhs), "\n\tright:", -3!rhs;
       -2 message;
     ]
   ]
@@ -59,7 +59,7 @@ ASSERT_LIKE:{[test_name; lhs; rhs]
     [
       FAILED__+:1;
       `.test.MODULES__ insert (enlist test_name; 1b); 
-      message:"assertion failed.\n\tleft:", (-3!lhs), "\n\tright:", -3!rhs;
+      message:"assertion failed:\t",test_name,"\n\tleft:", (-3!lhs), "\n\tright:", -3!rhs;
       -2 message;
     ]
   ]
@@ -81,7 +81,7 @@ ASSERT:{[test_name;expr]
     [
       FAILED__+:1;
       `.test.MODULES__ insert (enlist test_name; 1b);
-      -2 "assertion failed.\n\tleft:1b\n\tright:0b";
+      -2 "assertion failed:\t",test_name,"\n\tleft:1b\n\tright:0b";
     ]
   ]
  }
