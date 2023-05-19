@@ -11,12 +11,12 @@ use super::{const_S, S};
 /// Convert `&str` to `S` (null-terminated character array).
 /// # Example
 /// ```no_run
-/// #[macro_use]
 /// use kdbplus::rusty_api::*;
+/// use kdbplus::str_to_S;
 ///
 /// #[no_mangle]
-/// pub extern "C" fn pingpong(_: *const K) -> *const K{
-///   unsafe{native::k(0, str_to_S("ping"), new_int(77), KNULL)}
+/// pub extern "C" fn pingpong(_: K) -> K{
+///   unsafe{native::k(0, str_to_S!("ping"), new_int(77), KNULL)}
 /// }
 /// ```
 /// ```q
@@ -25,13 +25,13 @@ use super::{const_S, S};
 /// q)pingpong[]
 /// `77_pong!!
 /// ```
-///
-/// # Safety
-/// while this operation is safe, the returned S is not guaranteed to be valid.
-/// for example, if the given string contains null bytes (`\0`) within it (not just at the end), the returned S will not be a valid c_string.
-#[allow(non_snake_case)]
-pub fn str_to_S(s: &str) -> S {
-    [s.as_bytes(), &[0]].concat().as_ptr() as S
+/// # Note
+/// This macro cannot be created as a function due to freeing resource of Rust (not sure).
+#[macro_export]
+macro_rules! str_to_S {
+    ($string: expr) => {
+        [$string.as_bytes(), &[b'\0']].concat().as_ptr() as S
+    };
 }
 
 /// Convert `S` to `&str`. This function is intended to convert symbol type (null-terminated char-array) to `str`.

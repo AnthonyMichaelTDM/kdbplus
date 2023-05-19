@@ -4,7 +4,7 @@
 //! [`KVal`](super::types::KVal) wrapper. However, that doesn't always fit every use case, so
 //! these are here to provide that extra flexibility.
 
-use crate::qtype;
+use crate::{qtype, str_to_S};
 
 use super::{native, utils::*, E, F, G, H, I, J, K, KNULL, KNULL_MUT, S, U, V};
 
@@ -21,7 +21,7 @@ use super::{native, utils::*, E, F, G, H, I, J, K, KNULL, KNULL_MUT, S, U, V};
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_bool(_: *const K) -> *const K{
-///   new_bool(0)
+///   new_bool(false)
 /// }
 /// ```
 /// ```q
@@ -30,8 +30,8 @@ use super::{native, utils::*, E, F, G, H, I, J, K, KNULL, KNULL_MUT, S, U, V};
 /// 0b
 /// ```
 #[inline]
-pub fn new_bool(boolean: I) -> *const K {
-    unsafe { native::kb(boolean) }
+pub fn new_bool(boolean: bool) -> *const K {
+    unsafe { native::kb(boolean as I) }
 }
 
 /// Constructor of q GUID object. Relabeling of `ku`.
@@ -213,7 +213,7 @@ pub fn new_char(character: char) -> *const K {
 /// ```
 #[inline]
 pub fn new_symbol(symbol: &str) -> *const K {
-    unsafe { native::ks(str_to_S(symbol)) }
+    unsafe { native::ks(str_to_S!(symbol)) }
 }
 
 /// Constructor of q symbol object from `S`. Relabeling of `ks`.
@@ -445,7 +445,7 @@ pub fn new_time(milliseconds: I) -> *const K {
 /// ```
 #[inline]
 pub fn new_enum(source: &str, index: J) -> *const K {
-    let sym = unsafe { native::k(0, str_to_S(source), KNULL) };
+    let sym = unsafe { native::k(0, str_to_S!(source), KNULL) };
     if unsafe { (*sym).qtype } == qtype::ERROR {
         // Error. Specified sym does not exist
         sym
@@ -467,7 +467,7 @@ pub fn new_enum(source: &str, index: J) -> *const K {
         let function = format!("{{`{}${} x}}", source, source);
         unsafe {
             native::r0(sym);
-            native::k(0, str_to_S(function.as_str()), native::kj(index), KNULL)
+            native::k(0, str_to_S!(function.as_str()), native::kj(index), KNULL)
         }
     }
 }
@@ -497,7 +497,7 @@ pub fn new_list(qtype: i8, length: J) -> *const K {
 /// ```
 #[inline]
 pub fn new_string(string: &str) -> *const K {
-    unsafe { native::kp(str_to_S(string)) }
+    unsafe { native::kp(str_to_S!(string)) }
 }
 
 /// same as [`new_string`] but without the conversion from `&str` to `S`,
@@ -527,7 +527,7 @@ pub unsafe fn new_string_from_S(cstring: S) -> *const K {
 /// ```
 #[inline]
 pub fn new_string_n(string: &str, length: J) -> *const K {
-    unsafe { native::kpn(str_to_S(string), length) }
+    unsafe { native::kpn(str_to_S!(string), length) }
 }
 
 /// Constructor of q dictionary object.
@@ -1374,7 +1374,7 @@ pub unsafe fn simple_to_compound(simple: *const K, enum_source: &str) -> *const 
         qtype::BOOL_LIST => {
             let simple_slice = simple.as_slice::<G>().unwrap();
             for i in 0..size {
-                compound_slice[i] = new_bool(simple_slice[i] as I) as *mut K;
+                compound_slice[i] = new_bool(simple_slice[i] != 0) as *mut K;
             }
         }
         qtype::GUID_LIST => {
