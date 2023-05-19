@@ -365,6 +365,52 @@ impl<'a> KVal<'a> {
         Ok(base)
     }
 
+    /// Create a list variant from an atom
+    ///
+    /// takes ownwership of self, and returns either a new list variant, or self unchanged
+    ///
+    /// # Note
+    /// * if the object is already a list, it will be returned unchanged
+    /// * if the object is an atom, it will be converted to a list
+    /// * if the object is any other variant, an error will be returned
+    #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
+    pub fn to_list(self) -> Result<KVal<'a>, &'static str> {
+        use KData::*; // for brevity
+        use KVal::*; // for brevity
+
+        macro_rules! to_list {
+            ($kdata:ident, $ktype:path) => {
+                match $kdata {
+                    Atom(&atom) => Ok($ktype(List(Cow::from(vec![atom])))),
+                    List(list) => Ok($ktype(List(list))),
+                }
+            };
+        }
+
+        match self {
+            CompoundList(_) => Ok(self),
+            Bool(data) => to_list!(data, Bool),
+            Guid(data) => to_list!(data, Guid),
+            Byte(data) => to_list!(data, Byte),
+            Short(data) => to_list!(data, Short),
+            Int(data) => to_list!(data, Int),
+            Long(data) => to_list!(data, Long),
+            Real(data) => to_list!(data, Real),
+            Float(data) => to_list!(data, Float),
+            Symbol(data) => to_list!(data, Symbol),
+            Timestamp(data) => to_list!(data, Timestamp),
+            Month(data) => to_list!(data, Month),
+            Date(data) => to_list!(data, Date),
+            Datetime(data) => to_list!(data, Datetime),
+            Timespan(data) => to_list!(data, Timespan),
+            Minute(data) => to_list!(data, Minute),
+            Second(data) => to_list!(data, Second),
+            Time(data) => to_list!(data, Time),
+            Enum(data) => to_list!(data, Enum),
+            _ => Result::Err("invalid type\0"),
+        }
+    }
+
     /// Convert this value back into a K value,
     ///
     /// # Note
