@@ -208,25 +208,6 @@ impl_safe_cast_for!(KList);
 impl_safe_cast_for!([u8; 16]);
 impl_safe_cast_for!(bool);
 
-// manual impl for chars
-impl SafeToCastFromKInner for char {
-    #[inline]
-    fn cast<'a>(inner: k_inner) -> &'a mut Self {
-        let ptr = unsafe { &inner.byte_array as *const u8 };
-        if ptr.is_null() {
-            unimplemented!()
-        }
-        let ptr = ptr as *mut char;
-        unsafe { &mut *ptr }
-    }
-
-    #[inline]
-    fn cast_with_ptr_offset<'a>(_: k_inner) -> &'a mut Self {
-        // you don't make a list of chars with k, so no need for this method
-        unimplemented!("char lists are not a thing in q, use a string instead")
-    }
-}
-
 /// Underlying struct of raw `K` object.
 #[repr(C)]
 #[derive(Clone, Copy)]

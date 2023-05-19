@@ -53,7 +53,7 @@ where
 pub enum KVal<'a> {
     // by doing it this way, we can use the same enum for both atoms and lists
     /// Slice of pointers to other K objects
-    CompoundList(Vec<*mut K>),
+    CompoundList(Cow<'a, [*mut K]>),
     /// Note: the C api uses [`I`] (i32) for booleans. we use bool in Rust.
     Bool(KData<'a, bool>),
     /// Note: the C api uses \[[`G`]; 16\] (c_uchar) for guids. we use [u8; 16] in Rust.
@@ -71,7 +71,7 @@ pub enum KVal<'a> {
     /// Note: the C api uses [`F`] (f64) for floats. we use f64 in Rust.
     Float(KData<'a, f64>),
     /// Note: the C api uses [`I`] (i32) for chars. we use char in Rust https://github.com/KxSystems/kdb/blob/bbc40b8cb870948122a36cb80a486bc5f7e470d7/c/c/k.h#L29.
-    Char(&'a char),
+    Char(char),
     /// Note: the C api uses [`S`] (*mut c_char) for symbols. we use the same in Rust to avoid unecessary unsafety.
     Symbol(KData<'a, S>),
     /// Note: the C api uses [`J`] (i64) for timestamps. we use i64 in Rust.
@@ -162,7 +162,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* -13  */ qtype::MONTH_ATOM => KVal::Month(KData::atom(k)),
             /* -12  */ qtype::TIMESTAMP_ATOM => KVal::Timestamp(KData::atom(k)),
             /* -11  */ qtype::SYMBOL_ATOM => KVal::Symbol(KData::atom(k)),
-            /* -10  */ qtype::CHAR => KVal::Char(k.cast()),
+            /* -10  */ qtype::CHAR => KVal::Char(unsafe{k.value.byte} as char),
             /* -9   */ qtype::FLOAT_ATOM => KVal::Float(KData::atom(k)),
             /* -8   */ qtype::REAL_ATOM => KVal::Real(KData::atom(k)),
             /* -7   */ qtype::LONG_ATOM => KVal::Long(KData::atom(k)),
@@ -172,7 +172,9 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* -2   */ qtype::GUID_ATOM => KVal::Guid(KData::guid_atom(k)),
             /* -1   */ qtype::BOOL_ATOM => KVal::Bool(KData::atom(k)),
             /* 0    */
-            qtype::COMPOUND_LIST => KVal::CompoundList(k.as_slice::<*mut K>().unwrap().to_owned()),
+            qtype::COMPOUND_LIST => {
+                KVal::CompoundList(Cow::Borrowed(k.as_slice::<*mut K>().unwrap()))
+            }
             /* 1    */ qtype::BOOL_LIST => KVal::Bool(KData::list(k)),
             /* 2    */ qtype::GUID_LIST => KVal::Guid(KData::list(k)),
             /* 4    */ qtype::BYTE_LIST => KVal::Byte(KData::list(k)),
@@ -225,7 +227,7 @@ impl<'a> KVal<'a> {
 
     /// Create a CompoundList Variant from this KVal
     ///
-    /// takes ownership of self, and returns it or a new KVal
+    /// takes self, and a new KVal that is a CompoundList with the contents of self
     ///
     /// in cases of an error, the error string will be null-terminated
     ///
@@ -263,16 +265,16 @@ impl<'a> KVal<'a> {
     /// # Safety
     /// enum_source must be able to be converted to a C string (i.e. no null bytes)
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn to_compound_list(self, enum_source: Option<&'a str>) -> Result<KVal<'a>, &'static str> {
+    pub fn to_compound_list(&'a self, enum_source: Option<&'a str>) -> Result<KVal<'a>, &'static str> {
         // private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
         macro_rules! to_compound {
             ($simple_list:ident,$constructor:expr) => {{
-                Ok(KVal::CompoundList(
+                Ok(KVal::CompoundList(Cow::Owned(
                     $simple_list
                         .iter()
                         .map(|&a| $constructor(a.into()).cast_mut())
                         .collect::<Vec<_>>(),
-                ))
+                )))
             }};
         }
 
@@ -280,7 +282,7 @@ impl<'a> KVal<'a> {
         use KData::*; // for brevity
         use KVal::*; // for brevity // for brevity
         match self {
-            CompoundList(_) => Ok(self),
+            CompoundList(list) => Ok(CompoundList(list.to_owned())),
             Bool(List(l)) => to_compound!(l, new_bool),
             Guid(KData::List(l)) => to_compound!(l, new_guid),
             Byte(KData::List(l)) => to_compound!(l, new_byte),
@@ -312,77 +314,80 @@ impl<'a> KVal<'a> {
     ///
     /// acheives same functionality as [`push`](crate::api::KUtility::push) and [`append`](crate::api::KUtility::append)
     ///
+    /// causes allocations
+    ///
     /// * in cases of errror, the error string will be null-terminated
     /// * will mutate base (except in error cases), causing base's inner Cow to be converted to it's owned variant (usually by cloning)
     /// * consumes other
     /// * order will always be [base[..], other[..]]
     ///
     /// # Side Effects
-    /// * takes ownership of base
-    /// * other will be consumed
     ///
     /// # Errors
     /// * if base and other are not the same type (ie Int or Long)
     /// * if base is a simple list and other is a compound list
     /// * if base or other are: Err, Null, Char, String, Table, Dictionary, Foreign, or SortedDictionary variant
-    /// 
+    ///
     /// # Note
     /// behavior depends on variant of base and other
-    /// * if base is an atom, other must be an atom or simple list of the same type, and base will be converted to a list (inner cow will be Owned)
-    /// * if base is a simple list, other must be a simple list or atom of the same type
+    /// * if base is a simple list, other must be a simple list of the same type
     /// * if base is a compound list, other must be a compound list (to combine a compound list with a simple list, use as_compound_list first)
-    /// 
+    ///
     /// # Examples
     /// TODO: add some
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn join(mut base: Self, other: Self) -> Result<Self, &'static str> {
+    pub fn join(&'a self, other: &'a Self) -> Result<Self, &'static str> {
         use KData::*; // for brevity
         use KVal::*; // for brevity
+
         // private macro to reduce code repition when joining 2 simple KVals (that may be atoms or lists)
         macro_rules! join {
-            ($base:ident, $other:ident, $type:path) => {
-                match ($base,$other) {
-                    (Atom(&base_atom), Atom(&other_atom)) => base = $type(List(Cow::from(vec![base_atom, other_atom]))),
-                    (Atom(&base_atom), List(other_list)) => {
-                        let mut tmp = vec![base_atom];
-                        tmp.append(&mut other_list.into_owned());
-                        base = $type(List(Cow::from(tmp)))
-                    },
-                    (List(base_list), Atom(&other_atom)) => base_list.to_owned().into_owned().push(other_atom),
-                    (List(base_list), List(other_list)) => base_list.to_owned().into_owned().append(&mut other_list.into_owned()),
-                }
-            };
+            ($variant:path, $base:ident, $other:ident) => {{
+                let mut base_list = $base.to_owned().into_owned();
+                let mut other_list = $other.to_owned().into_owned();
+                base_list.append(&mut other_list);
+                Ok($variant(List(Cow::Owned(base_list))))
+            }};
         }
-        // append other to base, or return error
-        match (&mut base, other) {
-            (CompoundList(base_data), CompoundList(mut other_data)) => {
-                base_data.append(&mut other_data);
-            },
-            (Bool(base_data), Bool(other_data)) => join!(base_data, other_data, KVal::Bool),
-            (Guid(base_data), Guid(other_data)) => join!(base_data, other_data, KVal::Guid),
-            (Byte(base_data), Byte(other_data)) => join!(base_data, other_data, KVal::Byte),
-            (Short(base_data), Short(other_data)) => join!(base_data, other_data, KVal::Short),
-            (Int(base_data), Int(other_data)) => join!(base_data, other_data, KVal::Int),
-            (Long(base_data), Long(other_data)) => join!(base_data, other_data, KVal::Long),
-            (Real(base_data), Real(other_data)) => join!(base_data, other_data, KVal::Real),
-            (Float(base_data), Float(other_data)) => join!(base_data, other_data, KVal::Float),
-            (Symbol(base_data), Symbol(other_data)) => join!(base_data, other_data, KVal::Symbol),
-            (Timestamp(base_data), Timestamp(other_data)) => join!(base_data, other_data, KVal::Timestamp),
-            (Month(base_data), Month(other_data)) => join!(base_data, other_data, KVal::Month),
-            (Date(base_data), Date(other_data)) => join!(base_data, other_data, KVal::Date),
-            (Datetime(base_data), Datetime(other_data)) => join!(base_data, other_data, KVal::Datetime),
-            (Timespan(base_data), Timespan(other_data)) => join!(base_data, other_data, KVal::Timespan),
-            (Minute(base_data), Minute(other_data)) => join!(base_data, other_data, KVal::Minute),
-            (Second(base_data), Second(other_data)) => join!(base_data, other_data, KVal::Second),
-            (Time(base_data), Time(other_data)) => join!(base_data, other_data, KVal::Time),
-            (Enum(base_data), Enum(other_data)) => join!(base_data, other_data, KVal::Enum),
-            _ => return Result::Err("invalid types\0"),
+        // append other to base, and return it or error
+        match (self, other) {
+            (CompoundList(base_list), CompoundList(other_list)) => {
+                let mut base_list = base_list.to_owned().into_owned();
+                let mut other_list = other_list.to_owned().into_owned();
+                base_list.append(&mut other_list);
+                Ok(CompoundList(Cow::Owned(base_list)))
+            }
+            (Bool(List(bl)), Bool(List(ol))) => join!(Bool, bl, ol),
+            (Guid(List(bl)), Guid(List(ol))) => join!(Guid, bl, ol),
+            (Byte(List(bl)), Byte(List(ol))) => join!(Byte, bl, ol),
+            (Short(List(bl)), Short(List(ol))) => join!(Short, bl, ol),
+            (Int(List(bl)), Int(List(ol))) => join!(Int, bl, ol),
+            (Long(List(bl)), Long(List(ol))) => join!(Long, bl, ol),
+            (Real(List(bl)), Real(List(ol))) => join!(Real, bl, ol),
+            (Float(List(bl)), Float(List(ol))) => join!(Float, bl, ol),
+            (Symbol(List(bl)), Symbol(List(ol))) => join!(Symbol, bl, ol),
+            (Timestamp(List(bl)), Timestamp(List(ol))) => {
+                join!(Timestamp, bl, ol)
+            }
+            (Month(List(bl)), Month(List(ol))) => join!(Month, bl, ol),
+            (Date(List(bl)), Date(List(ol))) => join!(Date, bl, ol),
+            (Datetime(List(bl)), Datetime(List(ol))) => {
+                join!(Datetime, bl, ol)
+            }
+            (Timespan(List(bl)), Timespan(List(ol))) => {
+                join!(Timespan, bl, ol)
+            }
+            (Minute(List(bl)), Minute(List(ol))) => join!(Minute, bl, ol),
+            (Second(List(bl)), Second(List(ol))) => join!(Second, bl, ol),
+            (Time(List(bl)), Time(List(ol))) => join!(Time, bl, ol),
+            (Enum(List(bl)), Enum(List(ol))) => join!(Enum, bl, ol),
+            _ => Result::Err("not a list or types do not match\0"),
         }
-        // if we get here, there was not an error, return base
-        Ok(base)
     }
 
     /// Create a list variant from an atom
+    ///
+    /// causes allocations
     ///
     /// takes ownwership of self, and returns either a new list variant, or self unchanged
     ///
@@ -391,21 +396,21 @@ impl<'a> KVal<'a> {
     /// * if the object is an atom, it will be converted to a list
     /// * if the object is any other variant, an error will be returned
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn to_list(self) -> Result<KVal<'a>, &'static str> {
+    pub fn to_list(&'a self) -> Result<KVal<'a>, &'static str> {
         use KData::*; // for brevity
         use KVal::*; // for brevity
 
         macro_rules! to_list {
             ($kdata:ident, $ktype:path) => {
                 match $kdata {
-                    Atom(&atom) => Ok($ktype(List(Cow::from(vec![atom])))),
-                    List(list) => Ok($ktype(List(list))),
+                    Atom(&atom) => Ok($ktype(List(Cow::Owned(vec![atom])))),
+                    List(list) => Ok($ktype(List(list.to_owned()))),
                 }
             };
         }
 
         match self {
-            CompoundList(_) => Ok(self),
+            CompoundList(list) => Ok(CompoundList(list.to_owned())),
             Bool(data) => to_list!(data, Bool),
             Guid(data) => to_list!(data, Guid),
             Byte(data) => to_list!(data, Byte),
@@ -492,7 +497,7 @@ impl<'a> KVal<'a> {
             KVal::Time(KData::List(list)) => list_to_k!(i32, qtype::TIME_LIST, list),
             KVal::Enum(KData::Atom(_)) => unimplemented!("pass an enum source to the to_k! macro"),
             KVal::Enum(KData::List(list)) => list_to_k!(i64, qtype::ENUM_LIST, list),
-            KVal::Char(&atom) => re_exports::new_char(atom),
+            KVal::Char(atom) => re_exports::new_char(atom),
             KVal::String(list) => re_exports::new_string(&list),
             KVal::Err(&err) => unsafe { re_exports::new_error_from_S(err) },
             KVal::Null => KNULL,

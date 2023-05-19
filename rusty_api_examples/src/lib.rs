@@ -91,18 +91,18 @@ pub extern "C" fn float_borders(_: *const K) -> *const K {
 /// Example of `qnull::C`.
 #[no_mangle]
 pub extern "C" fn char_border(_: *const K) -> *const K {
-    KVal::Char(&qnull_base::C).to_k()
+    KVal::Char(qnull_base::C).to_k()
 }
 
 /// Example of `qnull::S`.
 #[no_mangle]
 pub extern "C" fn string_borders(_: *const K) -> *const K {
-    KVal::CompoundList(vec![
+    KVal::CompoundList(Cow::Borrowed(&[
         KVal::Symbol(KData::Atom(&str_to_S!(qnull_base::S)))
             .to_k()
             .cast_mut(),
         KVal::String(Cow::from(qnull_base::S)).to_k().cast_mut(),
-    ])
+    ]))
     .to_k()
 }
 
@@ -284,7 +284,7 @@ pub extern "C" fn print_float(atom: *const K) -> *const K {
 #[no_mangle]
 pub extern "C" fn print_char(atom: *const K) -> *const K {
     match KVal::from_raw(atom) {
-        KVal::Char(&char) => {
+        KVal::Char(char) => {
             println!("char: \"{}\"", char);
             KNULL
         }
@@ -340,11 +340,14 @@ pub extern "C" fn pick_row(obj: *const K, index: *const K) -> *const K {
 /// example of KVal::join()
 #[no_mangle]
 pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
-    match KVal::join(
-        KVal::from_raw(list1).to_compound_list(None).unwrap(),
-        KVal::from_raw(list2),
-    ) {
-        Ok(list3) => to_k!(list3),
+    match KVal::from_raw(list1).join(&KVal::from_raw(list2)) {
+        Ok(list3) => {
+            println!("list3: {:?}", list3);
+            let l3 = list3.to_k();
+            println!("l3: {:?}", l3);
+            println!("l3 mem: {:?}", unsafe{*l3});
+            l3
+        },
         Err(e) => new_error(e),
     }
 }
@@ -355,7 +358,7 @@ pub extern "C" fn create_compound_list2(int: *const K) -> *const K {
     // compound lists can contain any type of K object
     let simp_list: KVal = KVal::Long(KData::List(Cow::from((0..5).collect::<Vec<i64>>())));
     let comp_list: KVal = simp_list.to_compound_list(None).unwrap();
-    KVal::join(comp_list, KVal::CompoundList(vec![int.cast_mut()]))
+    comp_list.join(&KVal::CompoundList(Cow::Borrowed(&[int.cast_mut()])))
         .unwrap()
         .to_k()
 }
@@ -421,14 +424,14 @@ pub extern "C" fn decrypt(list: *const K) -> *const K {
 // make a compound list from scratch
 #[no_mangle]
 pub extern "C" fn drift(_: *const K) -> *const K {
-    KVal::CompoundList(vec![
+    KVal::CompoundList(Cow::Borrowed(&[
         KVal::Int(KData::Atom(&12)).to_k().cast_mut(),
         KVal::Int(KData::Atom(&34)).to_k().cast_mut(),
         KVal::Symbol(KData::Atom(&str_to_S!("vague")))
             .to_k()
             .cast_mut(),
         KVal::Int(KData::Atom(&-3000)).to_k().cast_mut(),
-    ])
+    ]))
     .to_k()
 }
 // make a compound list from an existing simple list
@@ -444,13 +447,14 @@ pub extern "C" fn drift2(_: *const K) -> *const K {
     };
 
     // another compound list we want to add to the existing list
-    let other_list = KVal::CompoundList(vec![
+    let binding = [
         to_k!(KVal::Enum(KData::Atom(&2)), "enum2").cast_mut(), // `enum2[2]`.
         KVal::Month(KData::Atom(&3)).to_k().cast_mut(),
-    ]);
+    ];
+    let other_list = KVal::CompoundList(Cow::Borrowed(&binding));
 
     // return the joined list
-    match KVal::join(existing_list, other_list) {
+    match existing_list.join(&other_list) {
         Ok(joined) => joined.to_k(),
         Err(e_str) => new_error(e_str),
     }
