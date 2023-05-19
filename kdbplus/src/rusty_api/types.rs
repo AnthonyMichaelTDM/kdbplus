@@ -2,24 +2,28 @@
 // >> Structs
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
-use std::borrow::Cow;
-use super::C;
 use super::{re_exports, SafeToCastFromKInner, K, KNULL, S};
 use crate::qtype;
+use std::borrow::Cow;
 
 /// Rust friendly wrapper for q Atoms and Lists.
 /// references are mutable to indicate that changes should propagate back to q.
 #[derive(Debug)]
-pub enum KData<'a, T> 
-where T: 'a + std::fmt::Debug + SafeToCastFromKInner,
- [T]: 'a + ToOwned<Owned = Vec<T>> 
+pub enum KData<'a, T>
+where
+    T: 'a + std::fmt::Debug + SafeToCastFromKInner,
+    [T]: 'a + ToOwned<Owned = Vec<T>>,
 {
-    Atom(&'a T),   // TODO: Should this be mut, const, or neither?
+    Atom(&'a T), // TODO: Should this be mut, const, or neither?
     //List(&'a [T]), // TODO: Should this be mut, const, or neither?
-    List(Cow<'a, [T]>)
+    List(Cow<'a, [T]>),
 }
 
-impl<'a, T: 'a + std::fmt::Debug + SafeToCastFromKInner + std::clone::Clone> KData<'a, T> {
+impl<'a, T> KData<'a, T>
+where
+    T: 'a + std::fmt::Debug + SafeToCastFromKInner + std::clone::Clone,
+    [T]: 'a + ToOwned<Owned = Vec<T>>,
+{
     #[inline]
     /// # Safety
     /// k must be a valid pointer to a valid K object
@@ -33,6 +37,7 @@ impl<'a, T: 'a + std::fmt::Debug + SafeToCastFromKInner + std::clone::Clone> KDa
     fn guid_atom(k: &'a K) -> KData<'a, T> {
         KData::Atom(k.cast_with_ptr_offset()) // while this is an atom, it is packed into a list of 1
     }
+
     #[inline]
     /// # Safety
     /// same as [`K::as_slice`](type.K.html#method.as_slice)
@@ -92,8 +97,8 @@ pub enum KVal<'a> {
     /// * if your KVal is Enum Atom, you'll need to use [`to_k!(kval, enum_src)`](to_k) to convert
     ///   it to a K object. [`to_k`](to_k) will panic if you try to convert a enum atom.
     Enum(KData<'a, i64>),
-    /// Note: the C api uses [`S`] (*mut c_char) for strings. we will too for added flexibility in Rust.
-    String(&'a S),
+    /// Note: the C api uses [`S`] (*mut c_char) for strings. we use a Cow smart pointer so it's a zero-copy &str wrapper for read-only operations, that is converted to an owned string when needed in Rust.
+    String(Cow<'a, str>),
     // TODO: Foreign
     // TODO: Dictionary
     // TODO: Sorted Dictionary
@@ -176,7 +181,10 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* 7    */ qtype::LONG_LIST => KVal::Long(KData::list(k)),
             /* 8    */ qtype::REAL_LIST => KVal::Real(KData::list(k)),
             /* 9    */ qtype::FLOAT_LIST => KVal::Float(KData::list(k)),
-            /* 10   */ qtype::STRING => KVal::String(k.cast()),
+            /* 10   */
+            qtype::STRING => KVal::String(Cow::Borrowed(unsafe {
+                std::str::from_utf8_unchecked(k.as_slice_unchecked())
+            })),
             /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KData::list(k)),
             /* 12   */ qtype::TIMESTAMP_LIST => KVal::Timestamp(KData::list(k)),
             /* 13   */ qtype::MONTH_LIST => KVal::Month(KData::list(k)),
@@ -198,10 +206,12 @@ impl<'a> From<&'a K> for KVal<'a> {
 }
 
 impl<'a> KVal<'a> {
-    /// Create a CompoundList Variant from this KVal 
+    /// Create a CompoundList Variant from this KVal
+    ///
+    /// takes ownership of self, and returns it or a new KVal
     ///
     /// in cases of an error, the error string will be null-terminated
-    /// 
+    ///
     /// port of [`simple_to_compound`](crate::api::simple_to_compound)
     ///
     /// # Examples
@@ -236,62 +246,64 @@ impl<'a> KVal<'a> {
     /// # Safety
     /// enum_source must be able to be converted to a C string (i.e. no null bytes)
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn as_compound_list(&'a self, enum_source: Option<&'a str>) -> Result<KVal<'a>, &'static str> {
+    pub fn to_compound_list(self, enum_source: Option<&'a str>) -> Result<KVal<'a>, &'static str> {
         // private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
-        macro_rules! list_to_compound_list {
-            ($simple_list:ident,$map_closure:expr) => {
+        macro_rules! to_compound {
+            ($simple_list:ident,$constructor:expr) => {{
                 Ok(KVal::CompoundList(
-                    $simple_list.iter()
-                        .map($map_closure)
+                    $simple_list
+                        .iter()
+                        .map(|&a| $constructor(a.into()).cast_mut())
                         .collect::<Vec<_>>(),
                 ))
-            };
+            }};
         }
 
+        use re_exports::*;
         use KData::*; // for brevity
-        use KVal::*; // for brevity
+        use KVal::*; // for brevity // for brevity
         match self {
-            Bool(List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_bool(atom).cast_mut()),
-            Guid(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_guid(atom).cast_mut()),
-            Byte(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_byte(atom.into()).cast_mut()),
-            Short(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_short(atom.into()).cast_mut()),
-            Int(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_int(atom).cast_mut()),
-            Long(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_long(atom).cast_mut()),
-            Real(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_real(atom.into()).cast_mut()),
-            Float(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_float(atom).cast_mut()),
-            Symbol(KData::List(list)) => list_to_compound_list!(list, |&atom| unsafe { re_exports::new_symbol_from_S(atom) }.cast_mut()),
-            Timestamp(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_timestamp(atom).cast_mut()),
-            Month(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_month(atom).cast_mut()),
-            Date(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_date(atom).cast_mut()),
-            Datetime(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_datetime(atom).cast_mut()),
-            Timespan(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_timespan(atom).cast_mut()),
-            Minute(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_minute(atom).cast_mut()),
-            Second(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_second(atom).cast_mut()),
-            Time(KData::List(list)) => list_to_compound_list!(list, |&atom| re_exports::new_time(atom).cast_mut()),
-            Enum(KData::List(list)) => {
+            CompoundList(_) => Ok(self),
+            Bool(List(l)) => to_compound!(l, new_bool),
+            Guid(KData::List(l)) => to_compound!(l, new_guid),
+            Byte(KData::List(l)) => to_compound!(l, new_byte),
+            Short(KData::List(l)) => to_compound!(l, new_short),
+            Int(KData::List(l)) => to_compound!(l, new_int),
+            Long(KData::List(l)) => to_compound!(l, new_long),
+            Real(KData::List(l)) => to_compound!(l, new_real),
+            Float(KData::List(l)) => to_compound!(l, new_float),
+            Symbol(KData::List(l)) => to_compound!(l, |a| unsafe { new_symbol_from_S(a) }),
+            Timestamp(KData::List(l)) => to_compound!(l, new_timestamp),
+            Month(KData::List(l)) => to_compound!(l, new_month),
+            Date(KData::List(l)) => to_compound!(l, new_date),
+            Datetime(KData::List(l)) => to_compound!(l, new_datetime),
+            Timespan(KData::List(l)) => to_compound!(l, new_timespan),
+            Minute(KData::List(l)) => to_compound!(l, new_minute),
+            Second(KData::List(l)) => to_compound!(l, new_second),
+            Time(KData::List(l)) => to_compound!(l, new_time),
+            Enum(KData::List(l)) => {
                 let Some(source) = enum_source else {
                     return Result::Err("Enum list must have exactly one source per atom\0");
                 };
-                list_to_compound_list!(list, |&atom| re_exports::new_enum(source, atom).cast_mut())
+                to_compound!(l, |a| new_enum(source, a))
             }
             _ => Result::Err("self is not a simple list\0"),
         }
     }
 
     /// Join two KVals together
-    /// 
+    ///
     /// acheives same functionality as [`push`](crate::api::KUtility::push) and [`append`](crate::api::KUtility::append)
-    /// 
+    ///
     /// * in cases of errror, the error string will be null-terminated
     /// * will mutate base (except in error cases), causing base's inner Cow to be converted to it's owned variant (usually by cloning)
     /// * consumes other
     /// * order will always be [base[..], other[..]]
-    /// 
+    ///
     /// # Side Effects
-    /// * takes ownership of base, mutates it, returns it.
-    /// * base will be mutated
+    /// * takes ownership of base
     /// * other will be consumed
-    /// 
+    ///
     /// # Errors
     /// * if base and other are not the same type (ie Int or Long)
     /// * if base is a simple list and other is a compound list
@@ -359,31 +371,30 @@ impl<'a> KVal<'a> {
     /// * uses methods from the native q api to create NEW K objects from the data in this value.
     /// * consumes self, this is deliberate as we don't want multiple references to the same data
     /// * this function should be used to create NEW K objects from manually initialized KVals
-    /// 
+    ///
     /// # Examples
     /// TODO: add some
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
     pub fn to_k(self) -> *const K {
         // private macro to reduce repition in the to_k method when initializing a list
         macro_rules! list_to_k {
-            ($slice_type:ty, $new_list_type:expr,$from_list:ident) => {
-                {
-                    // create new k list with the same length as from_list
-                    let k = re_exports::new_list($new_list_type, $from_list.len().try_into().unwrap()).cast_mut();
-                    // copy elements over
-                    unsafe { &mut *k }
-                        .as_mut_slice::<$slice_type>()
-                        .unwrap()
-                        .copy_from_slice(&$from_list);
-                    k.cast_const()
-                }
-            }
+            ($slice_type:ty, $new_list_type:expr,$from_list:ident) => {{
+                // create new k list with the same length as from_list
+                let k = re_exports::new_list($new_list_type, $from_list.len().try_into().unwrap())
+                    .cast_mut();
+                // copy elements over
+                unsafe { &mut *k }
+                    .as_mut_slice::<$slice_type>()
+                    .unwrap()
+                    .copy_from_slice($from_list.as_ref());
+                k.cast_const()
+            }};
         }
 
         match self {
             KVal::CompoundList(list) => list_to_k!(*mut K, qtype::COMPOUND_LIST, list),
             KVal::Bool(KData::Atom(&atom)) => re_exports::new_bool(atom),
-            KVal::Bool(KData::List(list)) => list_to_k!(i32, qtype::BOOL_LIST, list),
+            KVal::Bool(KData::List(list)) => list_to_k!(bool, qtype::BOOL_LIST, list),
             KVal::Guid(KData::Atom(&atom)) => re_exports::new_guid(atom),
             KVal::Guid(KData::List(list)) => list_to_k!([u8; 16], qtype::GUID_LIST, list),
             KVal::Byte(KData::Atom(&atom)) => re_exports::new_byte(atom.into()),
@@ -391,7 +402,7 @@ impl<'a> KVal<'a> {
             KVal::Short(KData::Atom(&atom)) => re_exports::new_short(atom.into()),
             KVal::Short(KData::List(list)) => list_to_k!(i16, qtype::SHORT_LIST, list),
             KVal::Int(KData::Atom(&atom)) => re_exports::new_int(atom),
-            KVal::Int(KData::List(list)) => list_to_k!(i32  , qtype::INT_LIST, list),
+            KVal::Int(KData::List(list)) => list_to_k!(i32, qtype::INT_LIST, list),
             KVal::Long(KData::Atom(&atom)) => re_exports::new_long(atom),
             KVal::Long(KData::List(list)) => list_to_k!(i64, qtype::LONG_LIST, list),
             KVal::Real(KData::Atom(&atom)) => re_exports::new_real(atom.into()),
@@ -403,7 +414,7 @@ impl<'a> KVal<'a> {
             KVal::Timestamp(KData::Atom(&atom)) => re_exports::new_timestamp(atom),
             KVal::Timestamp(KData::List(list)) => list_to_k!(i64, qtype::TIMESTAMP_LIST, list),
             KVal::Month(KData::Atom(&atom)) => re_exports::new_month(atom),
-            KVal::Month(KData::List(list)) =>  list_to_k!(i32, qtype::MONTH_LIST, list),
+            KVal::Month(KData::List(list)) => list_to_k!(i32, qtype::MONTH_LIST, list),
             KVal::Date(KData::Atom(&atom)) => re_exports::new_date(atom),
             KVal::Date(KData::List(list)) => list_to_k!(i32, qtype::DATE_LIST, list),
             KVal::Datetime(KData::Atom(&atom)) => re_exports::new_datetime(atom),
