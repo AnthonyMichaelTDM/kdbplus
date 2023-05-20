@@ -6,7 +6,7 @@ pub mod types;
 
 use crate::qtype;
 use libc::{c_char, c_double, c_float, c_int, c_longlong, c_schar, c_short, c_uchar, c_void};
-use std::str;
+use std::fmt::Debug;
 pub mod native;
 mod utils;
 pub use utils::*;
@@ -47,18 +47,18 @@ pub const KNULL_MUT: *mut K = std::ptr::null_mut::<K>();
 /// should not be implemented by user code.
 pub trait SafeToCastFromKInner {
     // because this function takes ownership of inner, it is safe to cast it to a mutable reference
-    fn cast<'a>(inner: k_inner) -> &'a mut Self;
+    fn cast<'a>(k: &'a K) -> &'a mut Self;
     // because this function takes ownership of inner, it is safe to cast it to a mutable reference
-    fn cast_with_ptr_offset<'a>(inner: k_inner) -> &'a mut Self;
+    fn cast_with_ptr_offset<'a>(k: &'a K) -> &'a mut Self;
 }
 
 macro_rules! impl_safe_cast_for {
     ($t:ty) => {
         impl SafeToCastFromKInner for $t {
             #[inline]
-            fn cast<'a>(inner: k_inner) -> &'a mut Self {
+            fn cast<'a>(k: &'a K) -> &'a mut Self {
                 // get a pointer to the start of the block of memory used by the union
-                let ptr = unsafe { &inner.byte_array as *const u8 };
+                let ptr = unsafe { &k.value.byte_array as *const u8 };
                 if ptr.is_null() {
                     unimplemented!()
                 }
@@ -68,9 +68,9 @@ macro_rules! impl_safe_cast_for {
             }
 
             #[inline]
-            fn cast_with_ptr_offset<'a>(inner: k_inner) -> &'a mut Self {
+            fn cast_with_ptr_offset<'a>(k: &'a K) -> &'a mut Self {
                 // get a pointer to the start of the block of memory used by the union
-                let ptr = unsafe { &inner.byte_array as *const u8 };
+                let ptr = unsafe { &k.value.byte_array as *const u8 };
                 if ptr.is_null() {
                     unimplemented!()
                 }
@@ -196,6 +196,12 @@ pub union k_inner {
     pub byte_array: [u8; 16],
 }
 
+impl Debug for k_inner {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "{:X?}", unsafe { self.byte_array })
+    }
+}
+
 impl_safe_cast_for!(G);
 impl_safe_cast_for!(H);
 impl_safe_cast_for!(I);
@@ -210,7 +216,7 @@ impl_safe_cast_for!(bool);
 
 /// Underlying struct of raw `K` object.
 #[repr(C)]
-#[derive(Clone, Copy)]
+#[derive(Clone, Copy, Debug)]
 pub struct K {
     /// For internal usage.
     m: c_schar,
@@ -228,13 +234,13 @@ pub struct K {
 // these are accessors for the (untagged) union represented by value
 impl K {
     #[inline]
-    pub fn cast<'a, T: SafeToCastFromKInner>(&self) -> &'a mut T {
-        T::cast(self.value)
+    pub fn cast<'a, T: SafeToCastFromKInner>(&'a self) -> &'a mut T {
+        T::cast(self)
     }
 
     #[inline]
-    pub fn cast_with_ptr_offset<'a, T: SafeToCastFromKInner>(&self) -> &'a mut T {
-        T::cast_with_ptr_offset(self.value)
+    pub fn cast_with_ptr_offset<'a, T: SafeToCastFromKInner>(&'a self) -> &'a mut T {
+        T::cast_with_ptr_offset(self)
     }
 
     #[inline]

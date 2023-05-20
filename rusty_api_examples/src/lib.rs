@@ -340,14 +340,13 @@ pub extern "C" fn pick_row(obj: *const K, index: *const K) -> *const K {
 /// example of KVal::join()
 #[no_mangle]
 pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
-    match KVal::from_raw(list1).join(&KVal::from_raw(list2)) {
+    let list1 = KVal::from_raw(list1);
+    let list2 = KVal::from_raw(list2);
+
+    match list1.join(list2) {
         Ok(list3) => {
-            println!("list3: {:?}", list3);
-            let l3 = list3.to_k();
-            println!("l3: {:?}", l3);
-            println!("l3 mem: {:?}", unsafe{*l3});
-            l3
-        },
+            list3.to_k()
+        }
         Err(e) => new_error(e),
     }
 }
@@ -358,7 +357,8 @@ pub extern "C" fn create_compound_list2(int: *const K) -> *const K {
     // compound lists can contain any type of K object
     let simp_list: KVal = KVal::Long(KData::List(Cow::from((0..5).collect::<Vec<i64>>())));
     let comp_list: KVal = simp_list.to_compound_list(None).unwrap();
-    comp_list.join(&KVal::CompoundList(Cow::Borrowed(&[int.cast_mut()])))
+    comp_list
+        .join(KVal::CompoundList(Cow::Borrowed(&[int.cast_mut()])))
         .unwrap()
         .to_k()
 }
@@ -454,7 +454,7 @@ pub extern "C" fn drift2(_: *const K) -> *const K {
     let other_list = KVal::CompoundList(Cow::Borrowed(&binding));
 
     // return the joined list
-    match existing_list.join(&other_list) {
+    match existing_list.join(other_list) {
         Ok(joined) => joined.to_k(),
         Err(e_str) => new_error(e_str),
     }

@@ -8,7 +8,7 @@ use std::borrow::Cow;
 
 /// Rust friendly wrapper for q Atoms and Lists.
 /// references are mutable to indicate that changes should propagate back to q.
-#[derive(Debug)]
+#[derive(Debug, Clone)]
 pub enum KData<'a, T>
 where
     T: 'a + std::fmt::Debug + SafeToCastFromKInner,
@@ -43,13 +43,14 @@ where
     /// same as [`K::as_slice`](type.K.html#method.as_slice)
     /// but, additionally k must be a list of type T
     fn list(k: &'a K) -> KData<'a, T> {
-        KData::List(Cow::from(k.as_slice().unwrap()))
+        KData::List(Cow::Borrowed(k.as_slice().unwrap()))
     }
 }
 
 /// intuitive rust wrappers for q types, allowing for idiomatic rust code
 /// that can take full advantage of rust's powerful pattern matching and type system
 /// when interacting with q.
+#[derive(Debug,Clone)]
 pub enum KVal<'a> {
     // by doing it this way, we can use the same enum for both atoms and lists
     /// Slice of pointers to other K objects
@@ -184,9 +185,9 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* 8    */ qtype::REAL_LIST => KVal::Real(KData::list(k)),
             /* 9    */ qtype::FLOAT_LIST => KVal::Float(KData::list(k)),
             /* 10   */
-            qtype::STRING => KVal::String(Cow::Borrowed(unsafe {
-                std::str::from_utf8_unchecked(k.as_slice_unchecked())
-            })),
+            qtype::STRING => KVal::String(Cow::Borrowed(
+                std::str::from_utf8(k.as_slice().unwrap()).unwrap()
+            )),
             /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KData::list(k)),
             /* 12   */ qtype::TIMESTAMP_LIST => KVal::Timestamp(KData::list(k)),
             /* 13   */ qtype::MONTH_LIST => KVal::Month(KData::list(k)),
@@ -265,7 +266,7 @@ impl<'a> KVal<'a> {
     /// # Safety
     /// enum_source must be able to be converted to a C string (i.e. no null bytes)
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn to_compound_list(&'a self, enum_source: Option<&'a str>) -> Result<KVal<'a>, &'static str> {
+    pub fn to_compound_list(&'a self, enum_source: Option<&str>) -> Result<KVal<'a>, &'static str> {
         // private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
         macro_rules! to_compound {
             ($simple_list:ident,$constructor:expr) => {{
@@ -336,7 +337,7 @@ impl<'a> KVal<'a> {
     /// # Examples
     /// TODO: add some
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn join(&'a self, other: &'a Self) -> Result<Self, &'static str> {
+    pub fn join(self, other: Self) -> Result<Self, &'static str> {
         use KData::*; // for brevity
         use KVal::*; // for brevity
 
@@ -454,7 +455,7 @@ impl<'a> KVal<'a> {
                 unsafe { &mut *k }
                     .as_mut_slice::<$slice_type>()
                     .unwrap()
-                    .copy_from_slice($from_list.as_ref());
+                    .copy_from_slice($from_list.into_owned().as_slice());
                 k.cast_const()
             }};
         }
