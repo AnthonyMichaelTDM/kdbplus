@@ -15,7 +15,7 @@ use super::{const_S, S};
 /// use kdbplus::str_to_S;
 ///
 /// #[no_mangle]
-/// pub extern "C" fn pingpong(_: K) -> K{
+/// pub extern "C" fn pingpong(_: *const K) -> *const K{
 ///   unsafe{native::k(0, str_to_S!("ping"), new_int(77), KNULL)}
 /// }
 /// ```

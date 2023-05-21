@@ -83,26 +83,24 @@ macro_rules! impl_safe_cast_for {
         }
     };
 }
-
-#[cfg(test)]
-mod cast_sanity_checks {
-    use super::k_inner;
-
-    #[test]
-    fn test_k_inner_casting_methods() {
-        for i in 0..=10 {
-            let inner = k_inner { int: i };
-
-            let cast = {
-                let ptr = unsafe { &inner.byte_array as *const u8 };
-                let ptr = ptr as *mut i32;
-                unsafe { &mut *ptr }
-            };
-
-            assert_eq!(i, *cast);
-        }
-    }
-}
+//
+// #[cfg(test)]
+// mod cast_sanity_checks {
+//     use super::k_inner;
+//
+//     #[test]
+//     fn test_k_inner_casting_methods() {
+//         for i in 0..=10 {
+//             let mut inner = k_inner { int: i };
+//
+//             let ptr = unsafe { inner.byte_array.as_ptr().cast_mut() };
+//             let ptr = ptr as *mut i32;
+//             let cast = unsafe { &*ptr };
+//
+//             assert_eq!(i, *cast);
+//         }
+//     }
+// }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Structs

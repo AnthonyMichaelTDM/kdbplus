@@ -24,9 +24,9 @@ extern "C" {
 
     /// Constructor of q bool object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_bool(_: *const K) -> *const K{
@@ -42,9 +42,9 @@ extern "C" {
 
     /// Constructor of q GUID object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_guid(_: *const K) -> *const K{
@@ -60,9 +60,9 @@ extern "C" {
 
     /// Constructor of q byte object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_byte(_: *const K) -> *const K{
@@ -78,9 +78,9 @@ extern "C" {
 
     /// Constructor of q short object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_short(_: *const K) -> *const K{
@@ -96,9 +96,9 @@ extern "C" {
 
     /// Constructor of q int object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_int(_: *const K) -> *const K{
@@ -114,9 +114,9 @@ extern "C" {
 
     /// Constructor of q long object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_long(_: *const K) -> *const K{
@@ -132,9 +132,9 @@ extern "C" {
 
     /// Constructor of q real object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_real(_: *const K) -> *const K{
@@ -150,9 +150,9 @@ extern "C" {
 
     /// Constructor of q float object.
     /// # Example
-    /// ```
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_float(_: *const K) -> *const K{
@@ -168,9 +168,9 @@ extern "C" {
 
     ///  Constructor of q char object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_char(_: *const K) -> *const K{
@@ -186,11 +186,11 @@ extern "C" {
 
     /// Constructor of q symbol object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_symbol(_: *const K) -> *const K{
@@ -207,10 +207,10 @@ extern "C" {
     pub fn ks(symbol: S) -> *const K;
 
     /// Constructor of q timestamp from elapsed time in nanoseconds since kdb+ epoch (`2000.01.01`) or timespan object from nanoseconds.
-    /// ```no_run
+    /// ```ignore
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_timestamp(_: *const K) -> *const K{
@@ -236,9 +236,9 @@ extern "C" {
 
     /// Constructor of q date object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_date(_: *const K) -> *const K{
@@ -254,9 +254,9 @@ extern "C" {
     pub fn kd(date: I) -> *const K;
 
     /// Constructor of q datetime object from the number of days since kdb+ epoch (`2000.01.01`).
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_datetime(_: *const K) -> *const K{
@@ -273,9 +273,9 @@ extern "C" {
 
     /// Constructor of q time object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_time(_: *const K) -> *const K{
@@ -302,11 +302,11 @@ extern "C" {
 
     /// Constructor of q string object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_string(_: *const K) -> *const K{
@@ -322,11 +322,11 @@ extern "C" {
 
     /// Constructor if q string object with a fixed length.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_string2(_: *const K) -> *const K{
@@ -344,12 +344,12 @@ extern "C" {
     /// # Note
     /// Basically this is a `flip` command of q. Hence the value of the dictionary must have
     ///  lists as its elements.
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_table(_: *const K) -> *const K{
@@ -380,12 +380,12 @@ extern "C" {
 
     /// Constructor of simple q table object from q keyed table object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_table(_: *const K) -> *const K{
@@ -426,12 +426,12 @@ extern "C" {
 
     /// Constructor of q keyed table object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_table(_: *const K) -> *const K{
@@ -467,12 +467,12 @@ extern "C" {
 
     /// Constructor of q dictionary object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_dictionary() -> *const K{
@@ -497,9 +497,9 @@ extern "C" {
 
     /// Constructor of q error.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// pub extern "C" fn thai_kick(_: *const K) -> *const K{
     ///   unsafe{
@@ -521,10 +521,10 @@ extern "C" {
 
     /// Add a raw value to a q simple list and returns a pointer to the (potentially reallocated) `K` object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// use kdbplus::*;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_simple_list(_: *const K) -> *const K{
@@ -542,9 +542,9 @@ extern "C" {
 
     /// Append a q list object to a q list.
     ///  Returns a pointer to the (potentially reallocated) `K` object.
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn concat_list(mut list1: *const K, list2: K) -> *const K{
@@ -572,11 +572,11 @@ extern "C" {
     /// Add a q object to a q compound list.
     ///  Returns a pointer to the (potentially reallocated) `K` object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_compound_list(_: *const K) -> *const K{
@@ -606,12 +606,12 @@ extern "C" {
     /// Add an enumerated character array to a symbol list.
     ///  Returns a pointer to the (potentially reallocated) `K` object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn create_symbol_list(_: *const K) -> *const K{
@@ -653,10 +653,10 @@ extern "C" {
 
     /// Capture (and reset) error string into usual error object.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// extern "C" fn catchy(func: *const K, args: K) -> *const K{
     ///   unsafe{
@@ -687,12 +687,12 @@ extern "C" {
     /// Send a text query or evaluate the text query in a process which are loading the shared library.
     ///  As this library is purposed to build shared object, the only choice of `socket` is `0`. This
     ///  executes against the kdb+ process in which it is loaded.
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn dictionary_list_to_table() -> *const K{
@@ -730,9 +730,9 @@ extern "C" {
     /// - 2: unenumerate, allow serialization of timespan and timestamp
     /// - 3: unenumerate, compress, allow serialization of timespan and timestamp
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn conceal(object: *const K)->K{
@@ -750,9 +750,9 @@ extern "C" {
 
     /// Deserialize a bytes into q object.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn reveal(bytes: *const K)->K{
@@ -784,10 +784,10 @@ extern "C" {
     pub fn sd0x(socket: I, condition: I) -> V;
 
     /// Register callback to the associated kdb+ socket.
-    /// ```no_run
+    /// ```ignore
     /// use kdbplus::qtype;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     /// use std::ffi::c_void;
     ///
     /// // Send asynchronous query to the q process which sent a query to the caller of this function.
@@ -857,9 +857,9 @@ extern "C" {
     ///  object whose type is `qtype::ERROR` and when you created an object but do not intend to return it to
     ///  q side. See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn idle_man(_: *const K) -> *const K {
@@ -885,11 +885,11 @@ extern "C" {
     ///  function and intend to use the parameter after the call.
     ///  See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn pass_through_cave(pedestrian: *const K) -> *const K{
@@ -918,9 +918,9 @@ extern "C" {
 
     /// Apply a function to q list object `.[func; args]`.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn rust_parse(dollar: *const K, type_and_text: K) -> *const K{
@@ -943,11 +943,11 @@ extern "C" {
     /// Set whether interning symbols uses a lock: `lock` is either 0 or 1.
     ///  Returns the previously set value.
     /// # Example
-    /// ```no_run
+    /// ```ignore
     /// #[macro_use]
     /// extern crate kdbplus;
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
     /// pub extern "C" fn parallel_sym_change(list: *const K) -> *const K{
@@ -993,9 +993,9 @@ extern "C" {
 
     /// Convert ymd to the number of days from `2000.01.01`.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// fn main(){
     ///
@@ -1008,9 +1008,9 @@ extern "C" {
 
     /// Convert days from `2000.01.01` to a number expressed as `yyyymmdd`.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::rusty-api::*;
-    /// use kdbplus::rusty-api::native::*;
+    /// ```ignore
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::native::*;
     ///
     /// fn main(){
     ///

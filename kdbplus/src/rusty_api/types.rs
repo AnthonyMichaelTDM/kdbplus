@@ -50,7 +50,7 @@ where
 /// intuitive rust wrappers for q types, allowing for idiomatic rust code
 /// that can take full advantage of rust's powerful pattern matching and type system
 /// when interacting with q.
-#[derive(Debug,Clone)]
+#[derive(Debug, Clone)]
 pub enum KVal<'a> {
     // by doing it this way, we can use the same enum for both atoms and lists
     /// Slice of pointers to other K objects
@@ -105,7 +105,7 @@ pub enum KVal<'a> {
     // TODO: Sorted Dictionary
     // TODO: Table
     /// q Error, created by krr or orr
-    Err(&'a S),
+    Error(&'a S),
     /// the q-equivalent value of null depends on a great many factors.
     Null,
 }
@@ -152,7 +152,7 @@ impl<'a> From<&'a K> for KVal<'a> {
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
     fn from(k: &'a K) -> KVal<'a> {
         match k.qtype {
-            /* -128 */ qtype::ERROR => KVal::Err(k.cast()),
+            /* -128 */ qtype::ERROR => KVal::Error(k.cast()),
             /* -20  */ qtype::ENUM_ATOM => KVal::Enum(KData::atom(k)),
             /* -19  */ qtype::TIME_ATOM => KVal::Time(KData::atom(k)),
             /* -18  */ qtype::SECOND_ATOM => KVal::Second(KData::atom(k)),
@@ -163,7 +163,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* -13  */ qtype::MONTH_ATOM => KVal::Month(KData::atom(k)),
             /* -12  */ qtype::TIMESTAMP_ATOM => KVal::Timestamp(KData::atom(k)),
             /* -11  */ qtype::SYMBOL_ATOM => KVal::Symbol(KData::atom(k)),
-            /* -10  */ qtype::CHAR => KVal::Char(unsafe{k.value.byte} as char),
+            /* -10  */ qtype::CHAR => KVal::Char(unsafe { k.value.byte } as char),
             /* -9   */ qtype::FLOAT_ATOM => KVal::Float(KData::atom(k)),
             /* -8   */ qtype::REAL_ATOM => KVal::Real(KData::atom(k)),
             /* -7   */ qtype::LONG_ATOM => KVal::Long(KData::atom(k)),
@@ -186,7 +186,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* 9    */ qtype::FLOAT_LIST => KVal::Float(KData::list(k)),
             /* 10   */
             qtype::STRING => KVal::String(Cow::Borrowed(
-                std::str::from_utf8(k.as_slice().unwrap()).unwrap()
+                std::str::from_utf8(k.as_slice().unwrap()).unwrap(),
             )),
             /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KData::list(k)),
             /* 12   */ qtype::TIMESTAMP_LIST => KVal::Timestamp(KData::list(k)),
@@ -500,7 +500,7 @@ impl<'a> KVal<'a> {
             KVal::Enum(KData::List(list)) => list_to_k!(i64, qtype::ENUM_LIST, list),
             KVal::Char(atom) => re_exports::new_char(atom),
             KVal::String(list) => re_exports::new_string(&list),
-            KVal::Err(&err) => unsafe { re_exports::new_error_from_S(err) },
+            KVal::Error(&err) => unsafe { re_exports::new_error_from_S(err) },
             KVal::Null => KNULL,
         }
     }

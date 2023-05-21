@@ -413,11 +413,17 @@ pub fn new_time(milliseconds: I) -> *const K {
 /// # Example
 /// ```no_run
 /// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::*;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_enum(source: *const K, index: *const K) -> *const K{
-///   // Error if the specified enum source does not exist or it is not a symbol list or the index is out of enum range
-///   new_enum(source.get_str().unwrap(), index.get_long().unwrap())
+///     // Error if the specified enum source does not exist or it is not a symbol list or the index is out of enum range
+///     match (KVal::from_raw(source), KVal::from_raw(index)) {
+///         (KVal::Symbol(KData::Atom(&source)), KVal::Long(KData::Atom(&index))) => {
+///             new_enum(unsafe {S_to_str(source.clone())}, index)
+///         }
+///         _ => new_error("type error, source must be symbol atom and index must be long atom\0")
+///     }
 /// }
 /// ```
 /// ```q
@@ -538,15 +544,15 @@ pub fn new_string_n(string: &str, length: J) -> *const K {
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_dictionary() -> *const K{
-///   let keys=new_list(qtype::INT_LIST, 2);
-///   keys.as_mut_slice::<I>()[0..2].copy_from_slice(&[0, 1]);
-///   let values=new_list(qtype::COMPOUND_LIST, 2);
-///   let date_list=new_list(qtype::DATE_LIST, 3);
+///   let keys=new_list(qtype::INT_LIST, 2).cast_mut();
+///   unsafe { (*keys).as_mut_slice_unchecked::<I>()[0..2].copy_from_slice(&[0, 1]) };
+///   let values=new_list(qtype::COMPOUND_LIST, 2).cast_mut();
+///   let date_list=new_list(qtype::DATE_LIST, 3).cast_mut();
 ///   // 2000.01.01 2000.01.02 2000.01.03
-///   date_list.as_mut_slice::<I>()[0..3].copy_from_slice(&[0, 1, 2]);
-///   let string=new_string("I'm afraid I would crash the application...");
-///   values.as_mut_slice::<K>()[0..2].copy_from_slice(&[date_list, string]);
-///   new_dictionary(keys, values)
+///   unsafe { (*date_list).as_mut_slice_unchecked::<I>()[0..3].copy_from_slice(&[0, 1, 2])};
+///   let string=new_string("I'm afraid I would crash the application...").cast_mut();
+///   unsafe { (*values).as_mut_slice_unchecked::<*mut K>()[0..2].copy_from_slice(&[date_list, string])};
+///   unsafe {new_dictionary(keys, values)}
 /// }
 /// ```
 /// ```q
@@ -568,15 +574,17 @@ pub unsafe fn new_dictionary(keys: *const K, values: *const K) -> *const K {
 /// ```no_run
 /// use kdbplus::qtype;
 /// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::*;
+/// use std::borrow::Cow;
+///
 ///
 /// #[no_mangle]
-/// pub extern "C" fn nullify(_: *const K) -> *const K{
-///   let nulls=new_list(qtype::COMPOUND_LIST, 3);
-///   let null_slice=nulls.as_mut_slice::<K>();
-///   null_slice[0]=new_null();
-///   null_slice[1]=new_string("null is not a general null");
-///   null_slice[2]=new_null();
-///   nulls
+/// pub extern "C" fn nullify(_: *const K) -> *const K {
+///     KVal::CompoundList(Cow::Borrowed(&[
+///         new_null().cast_mut(),
+///         new_string("null is not a general null").cast_mut(),
+///         new_null().cast_mut(),
+///     ])).to_k()
 /// }
 /// ```
 /// ```q
@@ -637,19 +645,21 @@ pub fn new_error_os(message: &str) -> *const K {
 /// # Example
 /// ```no_run
 /// use kdbplus::*;
-/// use kdbplus::rusty-api::*;
+/// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::*;
 ///
-/// extern "C" fn no_panick(func: *const K, args: K) -> *const K{
-///   let result=unsafe{error_to_string(apply(func, args))};
-///   if let Ok(error) = result.get_error_string(){
-///     println!("FYI: {}", error);
-///     // Decrement reference count of the error object which is no longer used.
-///     unsafe{decrement_reference_count(result)};
-///     KNULL
-///   }
-///   else{
-///     result
-///   }
+/// #[no_mangle]
+/// extern "C" fn no_panick(func: *const K, args: *const K) -> *const K{
+///     let result=unsafe{error_to_string(apply(func, args))};
+///     match KVal::from_raw(result) {
+///         KVal::Error(&error) => {
+///             println!("FYI: {}", unsafe { S_to_str(error) } );
+///             // Decrement reference count of the error object which is no longer used.
+///             unsafe{decrement_reference_count(result)};
+///             KNULL
+///         },
+///         _ => result
+///     }
 /// }
 /// ```
 /// ```q
@@ -682,42 +692,44 @@ pub unsafe fn error_to_string(error: *const K) -> *const K {
 /// # Examples
 /// ```no_run
 /// use kdbplus::*;
-/// use kdbplus::rusty-api::*;
+/// use kdbplus::rusty_api::*;
+/// use kdbplus::rusty_api::types::*;
 ///
 /// fn love_even(arg: *const K) -> *const K{
-///   if let Ok(int) = arg.get_int(){
-///     if int % 2 == 0{
-///       // Silent for even value
-///       KNULL
+///     match KVal::from_raw(arg) {
+///         KVal::Int(KData::Atom(&int)) => {
+///             if int % 2 == 0{
+///                 // Silent for even value
+///                 KNULL
+///             }
+///             else{
+///                 // Shout against odd value
+///                 new_error("great is the even value!!\0")
+///             }
+///         }
+///         _ => {
+///             // Pass through
+///             unsafe { increment_reference_count(arg) }
+///         }
 ///     }
-///     else{
-///       // Shout against odd value
-///       new_error("great is the even value!!\0")
-///     }
-///   }
-///   else{
-///     // Pass through
-///     increment_reference_count(arg)
-///   }
 /// }
 ///
 /// #[no_mangle]
 /// pub extern "C" fn propagate(arg: *const K) -> *const K{
-///   let result=unsafe{error_to_string(love_even(arg))};
-///   if unsafe{is_error(result)}{
-///     // Propagate the error
-///     result
-///   }
-///   else if result.get_type() == qtype::ERROR{
-///     // KNULL
-///     println!("this is KNULL");
-///     unsafe{decrement_reference_count(result)};
-///     KNULL
-///   }
-///   else{
-///     // Other
-///     new_symbol("sonomama")
-///   }
+///     let result=unsafe{error_to_string(love_even(arg))};
+///     if unsafe{is_error(result)}{
+///         // Propagate the error
+///         return result;
+///     }
+///     match KVal::from_raw(result) {
+///         KVal::Error(_) => {
+///             // KNULL
+///             println!("this is KNULL");
+///             unsafe{decrement_reference_count(result)};
+///             KNULL
+///         },
+///         _ => new_symbol("sonomama")
+///     }
 /// }
 /// ```
 /// ```q
@@ -784,26 +796,25 @@ pub unsafe fn enumerate(string: S) -> S {
 /// Basically this is a `flip` command of q. Hence the value of the dictionary must have
 ///  lists as its elements.
 /// ```no_run
-/// use kdbplus::str_to_S;
-/// use kdbplus::rusty-api::*;
-/// use kdbplus::qtype;
+/// use kdbplus::rusty_api::*;
+/// use kdbplus::*;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_table2(_: *const K) -> *const K{
 ///   // Build keys
-///   let keys=new_list(qtype::SYMBOL_LIST, 2);
-///   let keys_slice=unsafe{keys.as_mut_slice::<S>()};
-///   keys_slice[0]=unsafe{enumerate(str_to_S("time"))};
-///   keys_slice[1]=unsafe{enumerate_n(str_to_S("temperature_and_humidity"), 11)};
+///   let keys=new_list(qtype::SYMBOL_LIST, 2).cast_mut();
+///   let keys_slice=unsafe{(*keys).as_mut_slice_unchecked::<S>()};
+///   keys_slice[0]=unsafe{enumerate(str_to_S!("time"))};
+///   keys_slice[1]=unsafe{enumerate_n(str_to_S!("temperature_and_humidity"), 11)};
 ///   
 ///   // Build values
-///   let values=new_list(qtype::COMPOUND_LIST, 2);
-///   let time=new_list(qtype::TIMESTAMP_LIST, 3);
+///   let values=new_list(qtype::COMPOUND_LIST, 2).cast_mut();
+///   let time=new_list(qtype::TIMESTAMP_LIST, 3).cast_mut();
 ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
-///   unsafe{time.as_mut_slice::<J>()}.copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
-///   let temperature=new_list(qtype::FLOAT_LIST, 3);
-///   unsafe{temperature.as_mut_slice::<F>()}.copy_from_slice(&[22.1_f64, 24.7, 30.5]);
-///   unsafe{values.as_mut_slice::<K>()}.copy_from_slice(&[time, temperature]);
+///   unsafe{(*time).as_mut_slice_unchecked::<J>()}.copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+///   let temperature=new_list(qtype::FLOAT_LIST, 3).cast_mut();
+///   unsafe{(*temperature).as_mut_slice_unchecked::<F>()}.copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+///   unsafe{(*values).as_mut_slice_unchecked::<*mut K>()}.copy_from_slice(&[time, temperature]);
 ///   
 ///   unsafe{flip(new_dictionary(keys, values))}
 /// }
@@ -832,27 +843,27 @@ pub unsafe fn flip(dictionary: *const K) -> *const K {
 /// ```no_run
 /// use kdbplus::rusty_api::*;
 /// use kdbplus::rusty_api::types::{KVal, KData};
-/// use kdbplus::qtype;
+/// use kdbplus::*;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_table2(_: *const K) -> *const K{
 ///   // Build keys
-///   let keys = KVal::Symbol(KData::List(&mut [
-///     unsafe { enumerate(str_to_S("time")) },
-///     unsafe { enumerate_n(str_to_S("temperature_and_humidity"),11) },
-///   ])).to_k();
+///   let keys = KVal::Symbol(KData::List(std::borrow::Cow::Borrowed(&[
+///     unsafe { enumerate(str_to_S!("time")) },
+///     unsafe { enumerate_n(str_to_S!("temperature_and_humidity"),11) },
+///   ]))).to_k();
 ///   
 ///   // Build values
 ///   let time = KVal::Timestamp(KData::List(
-///     &mut [119067859167018272_i64, 201766609419710368, 271897944018691392]
+///     std::borrow::Cow::Borrowed(&[119067859167018272_i64, 201766609419710368, 271897944018691392])
 ///   )).to_k().cast_mut();
 ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
 ///   let temperature = KVal::Float(KData::List(
-///     &mut [22.1_f64, 24.7, 30.5]
+///     std::borrow::Cow::Borrowed(&[22.1_f64, 24.7, 30.5])
 ///   )).to_k().cast_mut();
 ///
 ///   let values = KVal::CompoundList(
-///     &mut [time, temperature]
+///     std::borrow::Cow::Borrowed(&[time, temperature])
 ///   ).to_k();
 ///   
 ///   unsafe{flip(new_dictionary(keys, values))}
@@ -895,24 +906,24 @@ pub unsafe fn unkey(keyed_table: *const K) -> *const K {
 /// # Example
 /// ```no_run
 /// use kdbplus::rusty_api::*;
-/// use kdbplus::qtype;
+/// use kdbplus::*;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn create_table2(_: *const K) -> *const K{
 ///   // Build keys
-///   let keys=new_list(qtype::SYMBOL_LIST, 2);
-///   let keys_slice=unsafe{keys.as_mut_slice::<S>()};
-///   keys_slice[0]=unsafe{enumerate(str_to_S("time"))};
-///   keys_slice[1]=unsafe{enumerate_n(str_to_S("temperature_and_humidity"), 11)};
+///   let keys=new_list(qtype::SYMBOL_LIST, 2).cast_mut();
+///   let keys_slice=unsafe{(*keys).as_mut_slice_unchecked::<S>()};
+///   keys_slice[0]=unsafe{enumerate(str_to_S!("time"))};
+///   keys_slice[1]=unsafe{enumerate_n(str_to_S!("temperature_and_humidity"), 11)};
 ///   
 ///   // Build values
-///   let values=new_list(qtype::COMPOUND_LIST, 2);
-///   let time=new_list(qtype::TIMESTAMP_LIST, 3);
+///   let values=new_list(qtype::COMPOUND_LIST, 2).cast_mut();
+///   let time=new_list(qtype::TIMESTAMP_LIST, 3).cast_mut();
 ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
-///   unsafe{time.as_mut_slice::<J>()}.copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
-///   let temperature=new_list(qtype::FLOAT_LIST, 3);
-///   unsafe{temperature.as_mut_slice::<F>()}.copy_from_slice(&[22.1_f64, 24.7, 30.5]);
-///   unsafe{values.as_mut_slice::<K>()}.copy_from_slice(&[time, temperature]);
+///   unsafe{(*time).as_mut_slice_unchecked::<J>()}.copy_from_slice(&[119067859167018272_i64, 201766609419710368, 271897944018691392]);
+///   let temperature=new_list(qtype::FLOAT_LIST, 3).cast_mut();
+///   unsafe{(*temperature).as_mut_slice_unchecked::<F>()}.copy_from_slice(&[22.1_f64, 24.7, 30.5]);
+///   unsafe{(*values).as_mut_slice_unchecked::<*mut K>()}.copy_from_slice(&[time, temperature]);
 ///   
 ///   unsafe{flip(new_dictionary(keys, values))}
 /// }
@@ -953,7 +964,7 @@ pub unsafe fn enkey(table: *const K, n: J) -> *const K {
 ///  q side. See details on [the reference page](https://code.kx.com/q/interfaces/c-client-for-q/#managing-memory-and-reference-counting).
 /// # Example
 /// ```no_run
-/// use kdbplus::rusty-api::*;
+/// use kdbplus::rusty_api::*;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn agriculture(_: *const K) -> *const K {
@@ -985,6 +996,7 @@ pub unsafe fn decrement_reference_count(qobject: *const K) -> V {
 /// # Example
 /// ```no_run
 /// use kdbplus::rusty_api::*;
+/// use kdbplus::*;
 ///
 /// fn eat(apple: *const K){
 ///   println!("おいしい！");
@@ -995,8 +1007,8 @@ pub unsafe fn decrement_reference_count(qobject: *const K) -> V {
 ///   for _ in 0..10{
 ///     eat(apple);
 ///   }
-///   unsafe{native::k(0, str_to_S("eat"), increment_reference_count(apple), KNULL);}
-///   increment_reference_count(apple)  
+///   unsafe{native::k(0, str_to_S!("eat"), increment_reference_count(apple), KNULL);}
+///   unsafe { increment_reference_count(apple) }
 /// }
 /// ```
 /// ```q
@@ -1019,13 +1031,7 @@ pub unsafe fn decrement_reference_count(qobject: *const K) -> V {
 /// # Safety
 /// input must be a valid pointer
 #[inline]
-pub fn increment_reference_count(qobject: *const K) -> *const K {
-    increment_reference_count_unsafe(qobject)
-}
-/// # Safety
-/// input must be a valid pointer
-#[inline(always)]
-fn increment_reference_count_unsafe(qobject: *const K) -> *const K {
+pub unsafe fn increment_reference_count(qobject: *const K) -> *const K {
     unsafe { native::r1(qobject) }
 }
 
@@ -1057,7 +1063,8 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 /// ```no_run
 /// use kdbplus::rusty_api::*;
 /// use kdbplus::rusty_api::types::{KVal, KData};
-/// use kdbplus::qtype;
+/// use kdbplus::*;
+/// use std::borrow::Cow;
 ///
 /// static mut PIPE:[I; 2]=[-1, -1];
 ///
@@ -1066,8 +1073,8 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 ///   let mut buffer: [*mut K; 1]=[0 as *mut K];
 ///   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
 ///   // Call `shout` function on q side with the received data.
-///   let result=unsafe { error_to_string(unsafe{native::k(0, str_to_S("shout"), buffer[0], KNULL)}) };
-///   if let KVal::Err(& err_str) = KVal::from(unsafe{&*result}) {
+///   let result=unsafe { error_to_string(unsafe{native::k(0, str_to_S!("shout"), buffer[0], KNULL)}) };
+///   if let KVal::Error(& err_str) = KVal::from(unsafe{&*result}) {
 ///     eprintln!("Execution error: {}", unsafe { S_to_str(err_str) });
 ///     unsafe { decrement_reference_count(result) };
 ///   };
@@ -1075,28 +1082,28 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 /// }
 ///
 /// #[no_mangle]
-/// pub extern "C" fn plumber(_: *const K) -> *const K{
-///   if 0 != unsafe{libc::pipe(PIPE.as_mut_ptr())}{
-///     return new_error("Failed to create pipe\0");
-///   }
-///   if KNULL == register_callback(unsafe{PIPE[0]}, callback){
-///     return new_error("Failed to register callback\0");
-///   }
-///   // Lock symbol in a worker thread.
-///   pin_symbol();
-///   let handle=std::thread::spawn(move ||{
-///     let precious=new_list(qtype::SYMBOL_LIST, 3).cast_mut();
-///     let KVal::Symbol(KData::List(precious_array)) = KVal::from(unsafe{&*precious}) else {
-///         unimplemented!()
-///     };
-///     precious_array[0]= unsafe { enumerate(null_terminated_str_to_S("belief\0")) };
-///     precious_array[1]= unsafe { enumerate(null_terminated_str_to_S("love\0")) };
-///     precious_array[2]= unsafe { enumerate(null_terminated_str_to_S("hope\0")) };
-///     unsafe{libc::write(PIPE[1], std::mem::transmute::<*mut K, *mut V>(precious), 8)};
-///   });
-///   handle.join().unwrap();
-///   unpin_symbol();
-///   KNULL
+/// pub extern "C" fn plumber(_: *const K) -> *const K {
+///     if 0 != unsafe { libc::pipe(PIPE.as_mut_ptr()) } {
+///         return new_error("Failed to create pipe\0");
+///     }
+///     if KNULL == register_callback(unsafe { PIPE[0] }, callback) {
+///         return new_error("Failed to register callback\0");
+///     }
+///     // Lock symbol in a worker thread.
+///     pin_symbol();
+///     let handle = std::thread::spawn(move || {
+///         let precious = KVal::Symbol(KData::List(Cow::from(vec![
+///             str_to_S!("belief"),
+///             str_to_S!("love"),
+///             str_to_S!("hope"),
+///         ])))
+///         .to_k()
+///         .cast_mut();
+///         unsafe { libc::write(PIPE[1], std::mem::transmute::<*mut K, *mut V>(precious), 8) };
+///     });
+///     handle.join().unwrap();
+///     unpin_symbol();
+///     KNULL
 /// }
 /// ```
 /// ```q
@@ -1179,66 +1186,72 @@ pub unsafe fn drop_q_object(obj: *const K) -> *const K {
 /// # Example
 /// ```no_run
 /// use kdbplus::rusty_api::*;
-/// use kdbplus::qtype;
+/// use kdbplus::rusty_api::types::*;
+/// use kdbplus::*;
 ///
 /// #[derive(Clone, Debug)]
 /// struct Planet{
-///   name: String,
-///   population: i64,
-///   water: bool
+///     name: String,
+///     population: i64,
+///     water: bool
 /// }
 ///
-/// impl Planet{
-///   /// Constructor of `Planet`.
-///   fn new(name: &str, population: i64, water: bool) -> Self{
-///     Planet{
-///       name: name.to_string(),
-///       population: population,
-///       water: water
+/// impl Planet {
+///     /// Constructor of `Planet`.
+///     fn new(name: &str, population: i64, water: bool) -> Self{
+///         Planet{
+///             name: name.to_string(),
+///             population: population,
+///             water: water
+///         }
 ///     }
-///   }
 ///
-///   /// Description of the planet.
-///   fn description(&self)->String{
-///     let mut desc=format!("The planet {} is a beautiful planet where {} people reside.", self.name, self.population);
-///     if self.water{
-///       desc+=" Furthermore water is flowing on the surface of it.";
+///     /// Description of the planet.
+///     fn description(&self)->String{
+///         let mut desc=format!("The planet {} is a beautiful planet where {} people reside.", self.name, self.population);
+///         if self.water{
+///             desc+=" Furthermore water is flowing on the surface of it.";
+///         }
+///         desc
 ///     }
-///     desc
-///   }
 /// }
 ///
 /// /// Example of `set_type`.
 /// #[no_mangle]
-/// pub extern "C" fn eden(_: *const K) -> *const K{
-///   let earth=Planet::new("earth", 7500_000_000, true);
-///   let mut foreign=new_list(qtype::COMPOUND_LIST, 2);
-///   let foreign_slice=foreign.as_mut_slice::<K>();
-///   foreign_slice[0]=drop_q_object as K;
-///   foreign_slice[1]=Box::into_raw(Box::new(earth)) as K;
-///   // Set as foreign object.
-///   foreign.set_type(qtype::FOREIGN);
-///   foreign
+/// pub unsafe extern "C" fn eden(_: *const K) -> *const K{
+///     let earth=Planet::new("earth", 7500_000_000, true);
+///     let mut foreign=new_list(qtype::COMPOUND_LIST, 2).cast_mut();
+///     let foreign_slice=unsafe { (*foreign).as_mut_slice_unchecked::<*mut K>()};
+///     foreign_slice[0]=drop_q_object as *mut K;
+///     foreign_slice[1]=Box::into_raw(Box::new(earth)) as *mut K;
+///     // Set as foreign object.
+///     unsafe {(*foreign).qtype = qtype::FOREIGN };
+///     foreign
 /// }
 ///
 /// extern "C" fn invade(planet: *const K, action: *const K) -> *const K{
-///   let obj=planet.as_mut_slice::<K>()[1] as *const Planet;
-///   println!("{:?}", unsafe{obj.as_ref()}.unwrap());
-///   let mut desc=unsafe{obj.as_ref()}.unwrap().description();
-///   if action.get_bool().unwrap(){
-///     desc+=" You shall not curse what God blessed.";
-///   }
-///   else{
-///     desc+=" I perceived I could find favor of God by blessing them.";
-///   }
-///   new_string(&desc)
+///     let obj=unsafe{(*planet.cast_mut()).as_mut_slice_unchecked::<*mut K>()[1] as *const Planet};
+///     println!("{:?}", unsafe{obj.as_ref()}.unwrap());
+///     let mut desc=unsafe{obj.as_ref()}.unwrap().description();
+///     match KVal::from_raw(action) {
+///         KVal::Bool(KData::Atom(&b)) => {
+///             if b {
+///                 desc+=" You shall not curse what God blessed."
+///             } else {
+///                 desc+=" I perceived I could find favor of God by blessing them.";
+///             }
+///         }
+///         _ => return new_error("input is not a boolean\0"),
+///     }
+///
+///     new_string(&desc)
 /// }
 ///
 /// /// Example of `load_as_q_function`.
 /// #[no_mangle]
 /// pub extern "C" fn probe(planet: *const K) -> *const K {
-///   // Return monadic function
-///   unsafe{native::k(0, str_to_S("{[func; planet] func[planet]}"), load_as_q_function(invade as *const V, 2), planet, KNULL)}
+///     // Return monadic function
+///     unsafe{native::k(0, str_to_S!("{[func; planet] func[planet]}"), load_as_q_function(invade as *const V, 2), planet, KNULL)}
 /// }
 /// ```
 /// ```q
@@ -1297,34 +1310,44 @@ pub fn days_to_ymd(days: I) -> I {
 /// use kdbplus::*;
 /// use kdbplus::rusty_api::*;
 /// use kdbplus::rusty_api::types::{KVal, KData};
+/// use std::borrow::Cow;
 ///
 /// #[no_mangle]
 /// pub extern "C" fn drift(_: *const K) -> *const K {
-///   // you can also just make the compound list directly
-///   let simple = KVal::Int(KData::List(
-///     &mut [12, 34]
-///   )).to_k();
-///   
-///   let extra=KVal::CompoundList(
-///     &mut [KVal::Symbol(KData::Symbol("vague")).to_k(), KVal::Int(KData::Int(-3000)).to_k()]
-///   );
-///
-///   // Convert an integer list into a compound list:
-///   let mut compound = unsafe {simple_to_compound(simple, "")};
-///   unsafe { compound.append(extra) }.unwrap()
+///     KVal::CompoundList(Cow::Borrowed(&[
+///         KVal::Int(KData::Atom(&12)).to_k().cast_mut(),
+///         KVal::Int(KData::Atom(&34)).to_k().cast_mut(),
+///         KVal::Symbol(KData::Atom(&str_to_S!("vague")))
+///             .to_k()
+///             .cast_mut(),
+///         KVal::Int(KData::Atom(&-3000)).to_k().cast_mut(),
+///     ]))
+///     .to_k()
 /// }
 ///
 /// #[no_mangle]
 /// pub extern "C" fn drift2(_: *const K) -> *const K {
-///   let simple=new_list(qtype::ENUM_LIST, 2);
-///   simple.as_mut_slice::<J>().copy_from_slice(&[0_i64, 1]);
-///   // Convert an enum indices into a compound list while creating enum values from the indices which are tied with
-///   //  an existing enum variable named "enum", i.e., Enum indices [0, 1] in the code are cast into `(enum[0]; enum[1])`.
-///   let mut compound = unsafe { simple_to_compound(simple, "enum") };
-///   // Add `enum2[2]`.
-///   compound.push(new_enum("enum2", 2)).unwrap();
-///   compound.push(new_month(3)).unwrap();
-///   compound
+///   let existing_list = KVal::Enum(KData::List(Cow::from(vec![0_i64, 1]))); // error messages returned by 'as_compound_list' are null terminated
+///  
+///     // Convert a list of enum indices into a compound list while creating enum values from the indices which are tied with
+///     //  an existing enum variable named "enum", i.e., Enum indices [0, 1] in the code are cast into `(enum[0]; enum[1])`.
+///     let existing_list = match existing_list.to_compound_list(Some("enum")) {
+///         Ok(compound) => compound,
+///         Err(e_str) => return new_error(e_str),
+///     };
+///  
+///     // another compound list we want to add to the existing list
+///     let binding = [
+///         to_k!(KVal::Enum(KData::Atom(&2)), "enum2").cast_mut(), // `enum2[2]`.
+///         KVal::Month(KData::Atom(&3)).to_k().cast_mut(),
+///     ];
+///     let other_list = KVal::CompoundList(Cow::Borrowed(&binding));
+///  
+///     // return the joined list
+///     match existing_list.join(other_list) {
+///         Ok(joined) => joined.to_k(),
+///         Err(e_str) => new_error(e_str),
+///     }
 /// }
 /// ```
 /// ```q

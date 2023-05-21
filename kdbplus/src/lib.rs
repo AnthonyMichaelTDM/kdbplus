@@ -327,15 +327,21 @@ pub mod qnull_base {
 
     /// Null value of char.
     /// # Example
-    /// ```no_run
-    /// use kdbplus::*;
-    /// use kdbplus::api::*;
-    ///
-    /// #[no_mangle]
-    /// pub extern "C" fn char_border(_: K) -> K{
-    ///   new_char(qnull_base::C)
-    /// }
-    /// ```
+    #[cfg_attr(
+        feature = "doc_cfg",
+        doc(cfg(feature = "api")),
+        doc = r#"
+    ```no_run
+    use kdbplus::*;
+    use kdbplus::api::*;
+    
+    #[no_mangle]
+    pub extern "C" fn char_border(_: K) -> K{
+      new_char(qnull_base::C)
+    }
+    ```
+    "#
+    )]
     /// ```q
     /// q)char_border: `libapi_examples 2: (`char_border; 1);
     /// q)char_border[]

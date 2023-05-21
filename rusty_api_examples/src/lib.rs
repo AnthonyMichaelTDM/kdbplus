@@ -344,9 +344,7 @@ pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
     let list2 = KVal::from_raw(list2);
 
     match list1.join(list2) {
-        Ok(list3) => {
-            list3.to_k()
-        }
+        Ok(list3) => list3.to_k(),
         Err(e) => new_error(e),
     }
 }
