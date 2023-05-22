@@ -1,17 +1,21 @@
+//++++++++++++++++++++++++++++++++++++++++++++++++++//
+// >> Import Modules
+//++++++++++++++++++++++++++++++++++++++++++++++++++//
+
 pub mod types;
+pub mod native;
+mod utils;
+mod re_exports;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Load Libraries
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 use crate::qtype;
+pub use utils::*;
+pub use re_exports::*;
 use libc::{c_char, c_double, c_float, c_int, c_longlong, c_schar, c_short, c_uchar, c_void};
 use std::fmt::Debug;
-pub mod native;
-mod utils;
-pub use utils::*;
-mod re_exports;
-pub use re_exports::*;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Global Variables
@@ -53,7 +57,7 @@ pub trait SafeToCastFromKInner {
 }
 
 macro_rules! impl_safe_cast_for {
-    ($t:ty) => {
+    ($($t:ty),*) => {$(
         impl SafeToCastFromKInner for $t {
             #[inline]
             fn cast<'a>(k: &'a K) -> &'a mut Self {
@@ -81,7 +85,7 @@ macro_rules! impl_safe_cast_for {
                 // unsafe { &mut *((ptr as *const usize).offset(1) as *mut Self) }
             }
         }
-    };
+    )*};
 }
 //
 // #[cfg(test)]
@@ -200,17 +204,7 @@ impl Debug for k_inner {
     }
 }
 
-impl_safe_cast_for!(G);
-impl_safe_cast_for!(H);
-impl_safe_cast_for!(I);
-impl_safe_cast_for!(J);
-impl_safe_cast_for!(E);
-impl_safe_cast_for!(F);
-impl_safe_cast_for!(S);
-impl_safe_cast_for!(*mut K);
-impl_safe_cast_for!(KList);
-impl_safe_cast_for!([u8; 16]);
-impl_safe_cast_for!(bool);
+impl_safe_cast_for!(G,H,I,J,E,F,S,*mut K,KList,[u8; 16],bool);
 
 /// Underlying struct of raw `K` object.
 #[repr(C)]
