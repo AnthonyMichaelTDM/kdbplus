@@ -2,20 +2,20 @@
 // >> Import Modules
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
-pub mod types;
 pub mod native;
-mod utils;
 mod re_exports;
+pub mod types;
+mod utils;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Load Libraries
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 use crate::qtype;
-pub use utils::*;
-pub use re_exports::*;
 use libc::{c_char, c_double, c_float, c_int, c_longlong, c_schar, c_short, c_uchar, c_void};
+pub use re_exports::*;
 use std::fmt::Debug;
+pub use utils::*;
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Global Variables
@@ -87,24 +87,6 @@ macro_rules! impl_safe_cast_for {
         }
     )*};
 }
-//
-// #[cfg(test)]
-// mod cast_sanity_checks {
-//     use super::k_inner;
-//
-//     #[test]
-//     fn test_k_inner_casting_methods() {
-//         for i in 0..=10 {
-//             let mut inner = k_inner { int: i };
-//
-//             let ptr = unsafe { inner.byte_array.as_ptr().cast_mut() };
-//             let ptr = ptr as *mut i32;
-//             let cast = unsafe { &*ptr };
-//
-//             assert_eq!(i, *cast);
-//         }
-//     }
-// }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Structs
@@ -204,7 +186,7 @@ impl Debug for k_inner {
     }
 }
 
-impl_safe_cast_for!(G,H,I,J,E,F,S,*mut K,KList,[u8; 16],bool);
+impl_safe_cast_for!(G, H, I, J, E, F, S, *mut K, KList, [u8; 16], bool);
 
 /// Underlying struct of raw `K` object.
 #[repr(C)]

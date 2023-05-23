@@ -1,5 +1,5 @@
 /
-* @file test.q
+* @file test-rusty.q
 * @overview Tests of C API examples. The artefact of `rusty_api_examples` is loaded
 * and functions are called from q side.
 \
@@ -9,7 +9,7 @@
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 // Fetch shared object from build directory.
-//system "cp ../target/debug/libapi_examples.so .";
+//system "cp ../target/debug/librusty_api_examples.so .";
 
 // Load test helper functions.
 \l test_helper_function.q
@@ -368,7 +368,7 @@ enum: `a`b;
 .test.ASSERT_ERROR["append - failure"; .api.concat_list2; (1 2 3; "45"); "not a list or types do not match"]
 
 / // push
-/ .test.ASSERT_EQ["push"; .api.create_compound_list2[5i]; (til 5), 5i]
+.test.ASSERT_EQ["push"; .api.create_compound_list2[5i]; (til 5), 5i]
 
 / // push_raw
 / .test.ASSERT_EQ["push_raw"; .api.create_simple_list2[]; 2000.01.01+til 5]

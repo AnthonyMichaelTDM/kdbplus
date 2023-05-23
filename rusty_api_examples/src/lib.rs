@@ -30,13 +30,13 @@ pub extern "C" fn vanity(_: *const K) -> *const K {
 /// Example of `qnull::U`.
 #[no_mangle]
 pub extern "C" fn guid_border(_: *const K) -> *const K {
-    KVal::Guid(KData::Atom(&qnull_base::U)).to_k()
+    KVal::Guid(KData::Atom(Cow::Borrowed(&qnull_base::U))).to_k()
 }
 
 /// Example of `qnull::H`, `qinf::H` and `qninf::H`.
 #[no_mangle]
 pub extern "C" fn short_borders(_: *const K) -> *const K {
-    KVal::Short(KData::List(Cow::from(vec![
+    KVal::Short(KData::List(Cow::Borrowed(&[
         qnull_base::H,
         qinf_base::H,
         qninf_base::H,
@@ -98,10 +98,10 @@ pub extern "C" fn char_border(_: *const K) -> *const K {
 #[no_mangle]
 pub extern "C" fn string_borders(_: *const K) -> *const K {
     KVal::CompoundList(Cow::Borrowed(&[
-        KVal::Symbol(KData::Atom(&str_to_S!(qnull_base::S)))
+        KVal::Symbol(KData::Atom(Cow::Owned(qnull_base::S.to_string())))
             .to_k()
             .cast_mut(),
-        KVal::String(Cow::from(qnull_base::S)).to_k().cast_mut(),
+        KVal::String(Cow::Borrowed(qnull_base::S)).to_k().cast_mut(),
     ]))
     .to_k()
 }
@@ -187,7 +187,7 @@ pub extern "C" fn print_guid(atom: *const K) -> *const K {
 pub extern "C" fn print_byte(atom: *const K) -> *const K {
     match KVal::from_raw(atom) {
         KVal::Byte(KData::Atom(byte)) => {
-            println!("byte: {:#4x}", byte);
+            println!("byte: {:#4x}", *byte);
             KNULL
         }
         _ => new_error("not a byte\0"),
@@ -295,8 +295,8 @@ pub extern "C" fn print_char(atom: *const K) -> *const K {
 #[no_mangle]
 pub extern "C" fn print_symbol2(atom: *const K) -> *const K {
     match KVal::from_raw(atom) {
-        KVal::Symbol(KData::Atom(&symbol)) => {
-            println!("symbol: '{}", unsafe { S_to_str(symbol) });
+        KVal::Symbol(KData::Atom(symbol)) => {
+            println!("symbol: '{}", symbol);
             KNULL
         }
         _ => new_error("not a symbol\0"),
@@ -363,13 +363,21 @@ pub extern "C" fn create_compound_list2(int: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn create_symbol_list2(_: *const K) -> *const K {
-    KVal::Symbol(KData::List(Cow::from(vec![
-        str_to_S!("Abraham"),
-        str_to_S!("Isaac"),
-        str_to_S!("Jacob"),
-        str_to_S!("Josephine"),
+    KVal::Symbol(KData::List(Cow::Borrowed(&[
+        "Abraham".to_string(),
+        "Isaac".to_string(),
+        "Jacob".to_string(),
+        "Joseph".to_string(),
     ])))
     .to_k()
+}
+
+//TODO: remove this function
+/// print the debug representation of a K object
+#[no_mangle]
+pub extern "C" fn print(k: *const K) -> *const K {
+    println!("k: {:?}", unsafe{*k});
+    KNULL
 }
 
 /// Example of `get_attribute`.
@@ -423,12 +431,12 @@ pub extern "C" fn decrypt(list: *const K) -> *const K {
 #[no_mangle]
 pub extern "C" fn drift(_: *const K) -> *const K {
     KVal::CompoundList(Cow::Borrowed(&[
-        KVal::Int(KData::Atom(&12)).to_k().cast_mut(),
-        KVal::Int(KData::Atom(&34)).to_k().cast_mut(),
-        KVal::Symbol(KData::Atom(&str_to_S!("vague")))
+        KVal::Int(KData::Atom(Cow::Borrowed(&12))).to_k().cast_mut(),
+        KVal::Int(KData::Atom(Cow::Borrowed(&34))).to_k().cast_mut(),
+        KVal::Symbol(KData::Atom(Cow::Owned("vague".to_string())))
             .to_k()
             .cast_mut(),
-        KVal::Int(KData::Atom(&-3000)).to_k().cast_mut(),
+        KVal::Int(KData::Atom(Cow::Borrowed(&-3000))).to_k().cast_mut(),
     ]))
     .to_k()
 }
@@ -446,8 +454,8 @@ pub extern "C" fn drift2(_: *const K) -> *const K {
 
     // another compound list we want to add to the existing list
     let binding = [
-        to_k!(KVal::Enum(KData::Atom(&2)), "enum2").cast_mut(), // `enum2[2]`.
-        KVal::Month(KData::Atom(&3)).to_k().cast_mut(),
+        to_k!(KVal::Enum(KData::Atom(Cow::Borrowed(&2))), "enum2").cast_mut(), // `enum2[2]`.
+        KVal::Month(KData::Atom(Cow::Borrowed(&3))).to_k().cast_mut(),
     ];
     let other_list = KVal::CompoundList(Cow::Borrowed(&binding));
 
@@ -473,8 +481,8 @@ extern "C" fn callback(socket: I) -> *const K {
     unsafe { libc::read(socket, buffer.as_mut_ptr() as *mut V, 8) };
     // Call `shout` function on q side with the received data.
     let result = unsafe { error_to_string(native::k(0, str_to_S!("shout"), buffer[0], KNULL)) };
-    if let KVal::Err(&err_str) = KVal::from(unsafe { &*result }) {
-        eprintln!("Execution error: {}", unsafe { S_to_str(err_str) });
+    if let KVal::Error(err) = KVal::from_raw(result) {
+        eprintln!("Execution error: {}", err.as_ref());
         unsafe { decrement_reference_count(result) };
     };
     KNULL
@@ -491,10 +499,10 @@ pub extern "C" fn plumber(_: *const K) -> *const K {
     // Lock symbol in a worker thread.
     pin_symbol();
     let handle = std::thread::spawn(move || {
-        let precious = KVal::Symbol(KData::List(Cow::from(vec![
-            str_to_S!("belief"),
-            str_to_S!("love"),
-            str_to_S!("hope"),
+        let precious = KVal::Symbol(KData::List(Cow::Borrowed(&[
+            "belief".to_string(),
+            "love".to_string(),
+            "hope".to_string(),
         ])))
         .to_k()
         .cast_mut();

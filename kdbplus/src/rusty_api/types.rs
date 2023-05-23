@@ -4,18 +4,24 @@
 
 use super::{re_exports, SafeToCastFromKInner, K, KNULL, S};
 use crate::qtype;
-use std::borrow::Cow;
+use std::{borrow::Cow, ffi::{CStr, CString}};
 
 /// Rust friendly wrapper for q Atoms and Lists.
 /// references are mutable to indicate that changes should propagate back to q.
 #[derive(Debug, Clone)]
 pub enum KData<'a, T>
 where
-    T: 'a + std::fmt::Debug + SafeToCastFromKInner,
-    [T]: 'a + ToOwned<Owned = Vec<T>>,
+    T: std::fmt::Debug + Clone,
+    [T]: ToOwned<Owned = Vec<T>>,
 {
-    Atom(&'a T), // TODO: Should this be mut, const, or neither?
+    /// wrapper for q atoms
+    /// Clone On Write (Cow) to allow zero copy when possible without sacrificing safety, and to allow for Atoms that are owned types (i.e. symbols)
+    Atom(Cow<'a, T>), // TODO: Should this be mut, const, or neither?
+
     //List(&'a [T]), // TODO: Should this be mut, const, or neither?
+    
+    /// wrapper for q lists
+    /// Clone On Write (Cow) to allow zero copy when possible without sacrificing safety, and to allow for ownership when necessary (i.e. merging 2 lists)
     List(Cow<'a, [T]>),
 }
 
@@ -28,28 +34,53 @@ where
     /// # Safety
     /// k must be a valid pointer to a valid K object
     fn atom(k: &'a K) -> KData<'a, T> {
-        KData::Atom(k.cast())
+        KData::Atom(Cow::Borrowed(k.cast()))
     }
 
     #[inline]
     /// # Safety
     /// k must be a valid pointer to a valid K object
     fn guid_atom(k: &'a K) -> KData<'a, T> {
-        KData::Atom(k.cast_with_ptr_offset()) // while this is an atom, it is packed into a list of 1
+        KData::Atom(Cow::Borrowed(k.cast_with_ptr_offset())) // while this is an atom, it is packed into a list of 1
     }
 
     #[inline]
     /// # Safety
-    /// same as [`K::as_slice`](type.K.html#method.as_slice)
+    /// same requirements as [`K::as_slice`](crate::rusty_api)
     /// but, additionally k must be a list of type T
     fn list(k: &'a K) -> KData<'a, T> {
         KData::List(Cow::Borrowed(k.as_slice().unwrap()))
     }
 }
 
+/// for Symbols, which are backed by a [`S`] (*mut c_char) (a pointer) and therefore need to be converted to a owned String to guarentee memory safety
+impl<'a> KData<'a, String> {
+    #[inline]
+    /// # Safety
+    /// k must be a valid pointer to a valid K object
+    fn symbol(k: &'a K) -> KData<'a, String> {
+        KData::Atom(Cow::Owned(String::from_utf8_lossy(unsafe { CStr::from_ptr(k.cast::<S>().cast_const()) }.to_bytes()).to_string()))
+    }
+
+    #[inline]
+    /// # Safety
+    /// k must be a valid pointer to a valid K object
+    fn symbol_list(k: &'a K) -> KData<'a, String> {
+        KData::List(Cow::Owned(
+            k.as_slice::<S>()
+                .unwrap()
+                .iter()
+                .map(|s| String::from_utf8_lossy(unsafe { CStr::from_ptr(*s) }.to_bytes()).to_string())
+                .collect::<Vec<String>>(),
+        ))
+    }
+}
+
 /// intuitive rust wrappers for q types, allowing for idiomatic rust code
 /// that can take full advantage of rust's powerful pattern matching and type system
 /// when interacting with q.
+///
+/// TODO: better document the parameters for each type, what they represent, and why they are the type they are.
 #[derive(Debug, Clone)]
 pub enum KVal<'a> {
     // by doing it this way, we can use the same enum for both atoms and lists
@@ -73,8 +104,8 @@ pub enum KVal<'a> {
     Float(KData<'a, f64>),
     /// Note: the C api uses [`I`] (i32) for chars. we use char in Rust https://github.com/KxSystems/kdb/blob/bbc40b8cb870948122a36cb80a486bc5f7e470d7/c/c/k.h#L29.
     Char(char),
-    /// Note: the C api uses [`S`] (*mut c_char) for symbols. we use the same in Rust to avoid unecessary unsafety.
-    Symbol(KData<'a, S>),
+    /// Note: the C api uses [`S`] (*mut c_char) for symbols. we use String in Rust to guarentee memory safety.
+    Symbol(KData<'a, String>),
     /// Note: the C api uses [`J`] (i64) for timestamps. we use i64 in Rust.
     Timestamp(KData<'a, i64>),
     /// Note: the C api uses [`I`] (i32) for months. we use i32 in Rust.
@@ -104,8 +135,10 @@ pub enum KVal<'a> {
     // TODO: Dictionary
     // TODO: Sorted Dictionary
     // TODO: Table
-    /// q Error, created by krr or orr
-    Error(&'a S),
+    /// q Error, created by krr or orr. we use Cow<str> in Rust to avoid reading invalid pointers if/when the data is dropped
+    /// # Note
+    /// * the inner string must be null terminated
+    Error(Cow<'a, str>),
     /// the q-equivalent value of null depends on a great many factors.
     Null,
 }
@@ -149,10 +182,14 @@ impl<'a> From<&'a K> for KVal<'a> {
     ///   * treat k as if it's been moved into this function, because it effectively has been.
     ///   * you should not try to mutate the value of the returned KVal as a way to change the
     ///     underlying k object, q is a functional language so functions should not have side effects.
+    /// * This function tries to use as few allocations as possible, but that isn't always possible (e.g. strings and symbols (really anything backed by pointers)).
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
     fn from(k: &'a K) -> KVal<'a> {
         match k.qtype {
-            /* -128 */ qtype::ERROR => KVal::Error(k.cast()),
+            /* -128 */
+            qtype::ERROR => KVal::Error(Cow::Borrowed(
+                std::str::from_utf8(k.as_slice().unwrap()).unwrap(),
+            )),
             /* -20  */ qtype::ENUM_ATOM => KVal::Enum(KData::atom(k)),
             /* -19  */ qtype::TIME_ATOM => KVal::Time(KData::atom(k)),
             /* -18  */ qtype::SECOND_ATOM => KVal::Second(KData::atom(k)),
@@ -162,7 +199,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             /* -14  */ qtype::DATE_ATOM => KVal::Date(KData::atom(k)),
             /* -13  */ qtype::MONTH_ATOM => KVal::Month(KData::atom(k)),
             /* -12  */ qtype::TIMESTAMP_ATOM => KVal::Timestamp(KData::atom(k)),
-            /* -11  */ qtype::SYMBOL_ATOM => KVal::Symbol(KData::atom(k)),
+            /* -11  */ qtype::SYMBOL_ATOM => KVal::Symbol(KData::symbol(k)),
             /* -10  */ qtype::CHAR => KVal::Char(unsafe { k.value.byte } as char),
             /* -9   */ qtype::FLOAT_ATOM => KVal::Float(KData::atom(k)),
             /* -8   */ qtype::REAL_ATOM => KVal::Real(KData::atom(k)),
@@ -188,7 +225,7 @@ impl<'a> From<&'a K> for KVal<'a> {
             qtype::STRING => KVal::String(Cow::Borrowed(
                 std::str::from_utf8(k.as_slice().unwrap()).unwrap(),
             )),
-            /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KData::list(k)),
+            /* 11   */ qtype::SYMBOL_LIST => KVal::Symbol(KData::symbol_list(k)),
             /* 12   */ qtype::TIMESTAMP_LIST => KVal::Timestamp(KData::list(k)),
             /* 13   */ qtype::MONTH_LIST => KVal::Month(KData::list(k)),
             /* 14   */ qtype::DATE_LIST => KVal::Date(KData::list(k)),
@@ -212,6 +249,8 @@ impl<'a> KVal<'a> {
     /// Create a new KVal from a K object
     ///
     /// dereferences a raw pointer.
+    ///
+    /// see [`from`](`KVal`) for more information, as this is just a wrapper around that function.
     ///
     /// # Safety
     /// * passed K object must be a valid pointer
@@ -266,14 +305,24 @@ impl<'a> KVal<'a> {
     /// # Safety
     /// enum_source must be able to be converted to a C string (i.e. no null bytes)
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn to_compound_list(&'a self, enum_source: Option<&str>) -> Result<KVal<'a>, &'static str> {
+    pub fn to_compound_list(self, enum_source: Option<&str>) -> Result<Self, &'static str> {
         // private macro to reduce code repition in the as_compound_list method when creating a compound list from a KData list
         macro_rules! to_compound {
+            // this variant is for when no type conversion is needed
             ($simple_list:ident,$constructor:expr) => {{
                 Ok(KVal::CompoundList(Cow::Owned(
                     $simple_list
                         .iter()
-                        .map(|&a| $constructor(a.into()).cast_mut())
+                        .map(|&a| $constructor(a).cast_mut())
+                        .collect::<Vec<_>>(),
+                )))
+            }};
+            // this variant if for when type conversion is needed, or when the type doesn't implement Copy (i.e. String)
+            ($simple_list:ident,$constructor:expr,$constructor_param:expr) => {{
+                Ok(KVal::CompoundList(Cow::Owned(
+                    $simple_list
+                        .iter()
+                        .map(|a| $constructor($constructor_param(a)).cast_mut())
                         .collect::<Vec<_>>(),
                 )))
             }};
@@ -286,13 +335,13 @@ impl<'a> KVal<'a> {
             CompoundList(list) => Ok(CompoundList(list.to_owned())),
             Bool(List(l)) => to_compound!(l, new_bool),
             Guid(KData::List(l)) => to_compound!(l, new_guid),
-            Byte(KData::List(l)) => to_compound!(l, new_byte),
-            Short(KData::List(l)) => to_compound!(l, new_short),
+            Byte(KData::List(l)) => to_compound!(l, new_byte, |a: &u8| (*a) as i32),
+            Short(KData::List(l)) => to_compound!(l, new_short, |a: &i16| (*a) as i32),
             Int(KData::List(l)) => to_compound!(l, new_int),
             Long(KData::List(l)) => to_compound!(l, new_long),
-            Real(KData::List(l)) => to_compound!(l, new_real),
+            Real(KData::List(l)) => to_compound!(l, new_real, |a:&f32| (*a).into()),
             Float(KData::List(l)) => to_compound!(l, new_float),
-            Symbol(KData::List(l)) => to_compound!(l, |a| unsafe { new_symbol_from_S(a) }),
+            Symbol(KData::List(l)) => to_compound!(l, |s: std::string::String| new_symbol(s.as_str()), |a: &std::string::String| a.to_owned()),
             Timestamp(KData::List(l)) => to_compound!(l, new_timestamp),
             Month(KData::List(l)) => to_compound!(l, new_month),
             Date(KData::List(l)) => to_compound!(l, new_date),
@@ -394,17 +443,18 @@ impl<'a> KVal<'a> {
     ///
     /// # Note
     /// * if the object is already a list, it will be returned unchanged
-    /// * if the object is an atom, it will be converted to a list
+    /// * if the object is an atom, it will be converted to a list (this involved cloning the atom)
     /// * if the object is any other variant, an error will be returned
+    /// * if the object is a symbol atom, it will be cloned
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn to_list(&'a self) -> Result<KVal<'a>, &'static str> {
+    pub fn to_list(self) -> Result<Self, &'static str> {
         use KData::*; // for brevity
         use KVal::*; // for brevity
 
         macro_rules! to_list {
             ($kdata:ident, $ktype:path) => {
                 match $kdata {
-                    Atom(&atom) => Ok($ktype(List(Cow::Owned(vec![atom])))),
+                    Atom(atom) => Ok($ktype(List(Cow::Owned(vec![atom.into_owned()])))),
                     List(list) => Ok($ktype(List(list.to_owned()))),
                 }
             };
@@ -440,7 +490,11 @@ impl<'a> KVal<'a> {
     /// * uses methods from the native q api to create NEW K objects from the data in this value.
     /// * consumes self, this is deliberate as we don't want multiple references to the same data
     /// * this function should be used to create NEW K objects from manually initialized KVals
+    /// * symbols need to be converted from strings to symbols before they can be made into K objects, this is done automatically but means symbol lists are slightly slower to convert than other types of lists
     ///
+    /// # Safety
+    /// * this function assumes that it will only be called to return a K object to q, and that q will be responsible for freeing the memory (especially true for Symbols), if this is not the case, memory leaks may occur
+    /// 
     /// # Examples
     /// TODO: add some
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
@@ -462,45 +516,61 @@ impl<'a> KVal<'a> {
 
         match self {
             KVal::CompoundList(list) => list_to_k!(*mut K, qtype::COMPOUND_LIST, list),
-            KVal::Bool(KData::Atom(&atom)) => re_exports::new_bool(atom),
+            KVal::Bool(KData::Atom(atom)) => re_exports::new_bool(atom.into_owned()),
             KVal::Bool(KData::List(list)) => list_to_k!(bool, qtype::BOOL_LIST, list),
-            KVal::Guid(KData::Atom(&atom)) => re_exports::new_guid(atom),
+            KVal::Guid(KData::Atom(atom)) => re_exports::new_guid(atom.into_owned()),
             KVal::Guid(KData::List(list)) => list_to_k!([u8; 16], qtype::GUID_LIST, list),
-            KVal::Byte(KData::Atom(&atom)) => re_exports::new_byte(atom.into()),
+            KVal::Byte(KData::Atom(atom)) => re_exports::new_byte((atom.into_owned()).into()),
             KVal::Byte(KData::List(list)) => list_to_k!(u8, qtype::BYTE_LIST, list),
-            KVal::Short(KData::Atom(&atom)) => re_exports::new_short(atom.into()),
+            KVal::Short(KData::Atom(atom)) => re_exports::new_short((atom.into_owned()).into()),
             KVal::Short(KData::List(list)) => list_to_k!(i16, qtype::SHORT_LIST, list),
-            KVal::Int(KData::Atom(&atom)) => re_exports::new_int(atom),
+            KVal::Int(KData::Atom(atom)) => re_exports::new_int(atom.into_owned()),
             KVal::Int(KData::List(list)) => list_to_k!(i32, qtype::INT_LIST, list),
-            KVal::Long(KData::Atom(&atom)) => re_exports::new_long(atom),
+            KVal::Long(KData::Atom(atom)) => re_exports::new_long(atom.into_owned()),
             KVal::Long(KData::List(list)) => list_to_k!(i64, qtype::LONG_LIST, list),
-            KVal::Real(KData::Atom(&atom)) => re_exports::new_real(atom.into()),
+            KVal::Real(KData::Atom(atom)) => re_exports::new_real((atom.into_owned()).into()),
             KVal::Real(KData::List(list)) => list_to_k!(f32, qtype::REAL_LIST, list),
-            KVal::Float(KData::Atom(&atom)) => re_exports::new_float(atom),
+            KVal::Float(KData::Atom(atom)) => re_exports::new_float(atom.into_owned()),
             KVal::Float(KData::List(list)) => list_to_k!(f64, qtype::FLOAT_LIST, list),
-            KVal::Symbol(KData::Atom(&atom)) => unsafe { re_exports::new_symbol_from_S(atom) },
-            KVal::Symbol(KData::List(list)) => list_to_k!(S, qtype::SYMBOL_LIST, list),
-            KVal::Timestamp(KData::Atom(&atom)) => re_exports::new_timestamp(atom),
+            KVal::Symbol(KData::Atom(atom)) => re_exports::new_symbol(atom.as_str()),
+            KVal::Symbol(KData::List(list)) => {
+                let k = re_exports::new_list(qtype::SYMBOL_LIST, list.len().try_into().unwrap())
+                    .cast_mut();
+                
+                unsafe { &mut *k }
+                    .as_mut_slice::<S>()
+                    .unwrap()
+                    .copy_from_slice(
+                        list.into_iter()
+                            .map(
+                                |s| unsafe { re_exports::enumerate(CString::new(s.as_str()).expect("CString::new failed").into_raw()) },
+                            )
+                            .collect::<Vec<_>>()
+                            .as_slice(),
+                    );
+                k.cast_const()
+            }
+            KVal::Timestamp(KData::Atom(atom)) => re_exports::new_timestamp(atom.into_owned()),
             KVal::Timestamp(KData::List(list)) => list_to_k!(i64, qtype::TIMESTAMP_LIST, list),
-            KVal::Month(KData::Atom(&atom)) => re_exports::new_month(atom),
+            KVal::Month(KData::Atom(atom)) => re_exports::new_month(atom.into_owned()),
             KVal::Month(KData::List(list)) => list_to_k!(i32, qtype::MONTH_LIST, list),
-            KVal::Date(KData::Atom(&atom)) => re_exports::new_date(atom),
+            KVal::Date(KData::Atom(atom)) => re_exports::new_date(atom.into_owned()),
             KVal::Date(KData::List(list)) => list_to_k!(i32, qtype::DATE_LIST, list),
-            KVal::Datetime(KData::Atom(&atom)) => re_exports::new_datetime(atom),
+            KVal::Datetime(KData::Atom(atom)) => re_exports::new_datetime(atom.into_owned()),
             KVal::Datetime(KData::List(list)) => list_to_k!(f64, qtype::DATETIME_LIST, list),
-            KVal::Timespan(KData::Atom(&atom)) => re_exports::new_timespan(atom),
+            KVal::Timespan(KData::Atom(atom)) => re_exports::new_timespan(atom.into_owned()),
             KVal::Timespan(KData::List(list)) => list_to_k!(i64, qtype::TIMESPAN_LIST, list),
-            KVal::Minute(KData::Atom(&atom)) => re_exports::new_minute(atom),
+            KVal::Minute(KData::Atom(atom)) => re_exports::new_minute(atom.into_owned()),
             KVal::Minute(KData::List(list)) => list_to_k!(i32, qtype::MINUTE_LIST, list),
-            KVal::Second(KData::Atom(&atom)) => re_exports::new_second(atom),
+            KVal::Second(KData::Atom(atom)) => re_exports::new_second(atom.into_owned()),
             KVal::Second(KData::List(list)) => list_to_k!(i32, qtype::SECOND_LIST, list),
-            KVal::Time(KData::Atom(&atom)) => re_exports::new_time(atom),
+            KVal::Time(KData::Atom(atom)) => re_exports::new_time(atom.into_owned()),
             KVal::Time(KData::List(list)) => list_to_k!(i32, qtype::TIME_LIST, list),
             KVal::Enum(KData::Atom(_)) => unimplemented!("pass an enum source to the to_k! macro"),
             KVal::Enum(KData::List(list)) => list_to_k!(i64, qtype::ENUM_LIST, list),
             KVal::Char(atom) => re_exports::new_char(atom),
             KVal::String(list) => re_exports::new_string(&list),
-            KVal::Error(&err) => unsafe { re_exports::new_error_from_S(err) },
+            KVal::Error(err) => re_exports::new_error(&err),
             KVal::Null => KNULL,
         }
     }
@@ -536,8 +606,8 @@ macro_rules! to_k {
     };
     ($kval:expr, $enum_src:expr ) => {
         match $kval {
-            kdbplus::rusty_api::types::KVal::Enum(KData::Atom(&atom)) => {
-                kdbplus::rusty_api::new_enum($enum_src, atom)
+            kdbplus::rusty_api::types::KVal::Enum(KData::Atom(atom)) => {
+                kdbplus::rusty_api::new_enum($enum_src, atom.into_owned())
             }
             _ => $kval.to_k(),
         }
