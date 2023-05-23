@@ -216,18 +216,6 @@ pub fn new_symbol(symbol: &str) -> *const K {
     unsafe { native::ks(str_to_S!(symbol)) }
 }
 
-/// Constructor of q symbol object from `S`. Relabeling of `ks`.
-///
-/// same as [`new_symbol`](crate::rusty_api::re_exports::new_symbol) but accepts `S` instead of `&str`
-///
-/// # Safety
-/// passed `cstring` must be valid, meaning it meets the conditions of [`core::ffi:c_str::CStr::from_ptr`]
-#[inline]
-#[allow(non_snake_case)]
-pub unsafe fn new_symbol_from_S(symbol: S) -> *const K {
-    unsafe { native::ks(symbol) }
-}
-
 /// Constructor of q timestamp from elapsed time in nanoseconds since kdb+ epoch (`2000.01.01`). Relabeling of `ktj`.
 /// ```no_run
 /// use kdbplus::rusty_api::*;
@@ -506,16 +494,6 @@ pub fn new_string(string: &str) -> *const K {
     unsafe { native::kp(str_to_S!(string)) }
 }
 
-/// same as [`new_string`] but without the conversion from `&str` to `S`,
-///
-/// # Safety
-/// passed `cstring` must be valid, meaning it meets the conditions of [`core::ffi:c_str::CStr::from_ptr`]
-#[inline]
-#[allow(non_snake_case)]
-pub unsafe fn new_string_from_S(cstring: S) -> *const K {
-    unsafe { native::kp(cstring) }
-}
-
 /// Constructor if q string object with a fixed length.
 /// # Example
 /// ```no_run
@@ -622,16 +600,6 @@ pub fn new_null() -> *const K {
 #[inline]
 pub fn new_error(message: &str) -> *const K {
     unsafe { native::krr(null_terminated_str_to_const_S(message)) }
-}
-
-/// same as [`new_error`] but without the conversion from `&str` to `S`,
-///
-/// # Safety
-/// passed `cstring` must be valid, meaning it meets the conditions of [`core::ffi:c_str::CStr::from_ptr`]
-#[inline]
-#[allow(non_snake_case)]
-pub unsafe fn new_error_from_S(cstring: S) -> *const K {
-    unsafe { native::krr(cstring) }
 }
 
 /// Similar to `new_error` but this function appends a system-error message to string `S` before passing it to internal `krr`.
