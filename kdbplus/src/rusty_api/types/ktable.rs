@@ -200,7 +200,7 @@ impl<'a> KTable<'a> {
         self.len() == 0
     }
 
-    /// Get a table row of the given index, as a CompoundList. For enumerated column, a names of a target `sym` list
+    /// Get a table row of the given index, as a Dictionary. For enumerated column, a names of a target `sym` list
     ///  to which symbol values are cast must be passed. In the example below, it is assumed that
     ///  there is a single enum column in a table and the column values are cast to a symbol list whose name is `sym`.
     ///    
@@ -273,7 +273,7 @@ impl<'a> KTable<'a> {
             };
         }
 
-        let values = self.dict.values.to_owned();
+        let KDict { keys, values } = self.dict.to_owned();
 
         match *values {
             KVal::CompoundList(columns) => {
@@ -359,7 +359,10 @@ impl<'a> KTable<'a> {
                     };
                     row.push(value_of_column_at_row)
                 }
-                Ok(KVal::CompoundList(row.to_owned()))
+                Ok(KVal::Dictionary(KDict::new(
+                    *keys,
+                    KVal::CompoundList(row.to_owned()),
+                )?))
             }
             _ => Err("values must be a compound list\0"),
         }
