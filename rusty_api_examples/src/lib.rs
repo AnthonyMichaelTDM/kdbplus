@@ -322,10 +322,12 @@ pub extern "C" fn print_string2(list: *const K) -> *const K {
     }
 }
 
-// TODO: fn hidden_key(), pre-requisites: support dictionaries
 #[no_mangle]
 pub extern "C" fn hidden_key(table: *const K) -> *const K {
-    todo!()
+    match KVal::from_raw(table, None) {
+        KVal::Table(table) => q_ipc_encode(table.dict.get_keys().to_owned().to_k(), 3).unwrap(),
+        _ => new_error("not a table\0"),
+    }
 }
 
 // Example of get_row
@@ -413,16 +415,14 @@ pub extern "C" fn numbers(obj: *const K) -> *const K {
 
 /// Example of `q_ipc_encode`.
 #[no_mangle]
-pub extern "C" fn encrypt(list: *const K) -> *const K {
-    //TODO: add q_ipc_encode functionality to KVal
-    todo!()
+pub extern "C" fn encrypt(object: *const K) -> *const K {
+    q_ipc_encode(object, 3).unwrap_or_else(|err| new_error(err))
 }
 
 /// Example of `q_ipc_decode`.
 #[no_mangle]
-pub extern "C" fn decrypt(list: *const K) -> *const K {
-    //TODO: add q_ipc_decode functionality to KVal
-    todo!()
+pub extern "C" fn decrypt(bytes: *const K) -> *const K {
+    q_ipc_decode(bytes).unwrap_or_else(|err| new_error(err))
 }
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//

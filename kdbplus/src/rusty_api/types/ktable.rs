@@ -241,6 +241,7 @@ impl<'a> KTable<'a> {
     /// q)row[table;1]
     /// row: `time`sym`go`miscellaneous!(2022.01.30D07:55:47.987133353;`Green;"x";`lion)
     /// ```
+    #[inline]
     pub fn get_row(
         &'a self,
         index: i64,

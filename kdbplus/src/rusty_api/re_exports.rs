@@ -1446,3 +1446,74 @@ pub unsafe fn simple_to_compound(simple: *const K, enum_source: &str) -> *const 
     decrement_reference_count(simple);
     compound
 }
+
+/// Serialize q object and return serialized q byte list object on success: otherwise null.
+///  Mode is either of:
+/// - -1: Serialize within the same process.
+/// - 1: retain enumerations, allow serialization of timespan and timestamp: Useful for passing data between threads
+/// - 2: unenumerate, allow serialization of timespan and timestamp
+/// - 3: unenumerate, compress, allow serialization of timespan and timestamp
+/// # Example
+/// ```no_run
+/// use kdbplus::rusty_api::*;
+///
+/// #[no_mangle]
+/// pub extern "C" fn encrypt(object: *const K)-> *const K {
+///   match q_ipc_encode(object, 3){
+///     Ok(bytes) => bytes,
+///     Err(error) => new_error(error)
+///   }
+/// }
+/// ```
+/// ```q
+/// q)disguise: `libapi_examples 2: (`encrypt; 1);
+/// q)list: (til 3; "abc"; 2018.02.18D04:30:00.000000000; `revive);
+/// q)disguise list
+/// 0x010000004600000000000400000007000300000000000000000000000100000000000000020..
+/// ```
+#[inline]
+pub fn q_ipc_encode(k: *const K, mode: I) -> Result<*const K, &'static str> {
+    let result = unsafe { error_to_string(native::b9(mode, k)) };
+    match unsafe { *result }.qtype {
+        qtype::ERROR => {
+            unsafe { decrement_reference_count(result) };
+            Err("failed to encode\0")
+        }
+        _ => Ok(result),
+    }
+}
+
+/// Deserialize a bytes into q object.
+/// # Example
+/// ```no_run
+/// use kdbplus::rusty_api::*;
+///
+/// #[no_mangle]
+/// pub extern "C" fn decrypt(bytes: *const K) -> *const K {
+///   match q_ipc_decode(bytes) {
+///     Ok(object) => object,
+///     Err(error) => new_error(error)
+///   }
+/// }
+/// ```
+/// ```q
+/// q)uncover: `libapi_examples 2: (`decrypt; 1);
+/// q)uncover -8!"What is the purpose of CREATION?"
+/// "What is the purpose of CREATION?"
+/// ```
+#[inline]
+pub fn q_ipc_decode(bytes: *const K) -> Result<*const K, &'static str> {
+    match unsafe { *bytes }.qtype {
+        qtype::BYTE_LIST => {
+            let result = unsafe { error_to_string(native::d9(bytes)) };
+            match unsafe { *result }.qtype {
+                qtype::ERROR => {
+                    unsafe { decrement_reference_count(result) };
+                    Err("failed to decode\0")
+                }
+                _ => Ok(result),
+            }
+        }
+        _ => return Err("not bytes\0"),
+    }
+}

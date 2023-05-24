@@ -114,8 +114,8 @@ LIBPATH_: `librusty_api_examples 2:
 / .api.create_timestamp2: LIBPATH_ (`create_timestamp2; 1);
 / // dj
 / .api.days_to_date: LIBPATH_ (`days_to_date; 1);
-/ // q_ipc_decode
-/ .api.decrypt: LIBPATH_ (`decrypt; 1);
+// q_ipc_decode
+.api.decrypt: LIBPATH_ (`decrypt; 1);
 / // k
 / .api.dictionary_list_to_table: LIBPATH_ (`dictionary_list_to_table; 1);
 // simple_to_compound
@@ -124,14 +124,14 @@ LIBPATH_: `librusty_api_examples 2:
 .api.drift2: LIBPATH_ (`drift2; 1);
 / // set_qtype
 / .api.eden: LIBPATH_ (`eden; 1);
-/ // q_ipc_encode
-/ .api.encrypt: LIBPATH_ (`encrypt; 1);
+// q_ipc_encode
+.api.encrypt: LIBPATH_ (`encrypt; 1);
 // qnull_base::F
 .api.float_borders: LIBPATH_ (`float_borders; 1);
 // qnull_base::U
 .api.guid_border: LIBPATH_ (`guid_border; 1);
-/ // get_dictionary
-/ .api.hidden_key: LIBPATH_ (`hidden_key; 1);
+// get_dictionary
+.api.hidden_key: LIBPATH_ (`hidden_key; 1);
 / // r0
 / .api.idle_man: LIBPATH_ (`idle_man; 1);
 // qnull_base::I
@@ -152,7 +152,7 @@ LIBPATH_: `librusty_api_examples 2:
 / .api.murmur: LIBPATH_ (`murmur; 1);
 // str_to_const_S
 .api.must_be_int: LIBPATH_ (`must_be_int; 1);
-/ // len
+// len
 .api.numbers: LIBPATH_ (`numbers; 1);
 / // error_to_string
 / .api.no_panick: LIBPATH_ (`no_panick; 2);
@@ -162,7 +162,7 @@ LIBPATH_: `librusty_api_examples 2:
 / .api.parallel_sym_change: LIBPATH_ (`parallel_sym_change; 1);
 / // r1
 / .api.pass_through_cave: LIBPATH_ (`pass_through_cave; 1);
-/ // get_row
+// get_row
 .api.pick_row: LIBPATH_ (`pick_row; 2);
 // str_to_S
 .api.pingpong: LIBPATH_ (`pingpong; 1);
@@ -343,9 +343,9 @@ enum: `a`b;
 .test.ASSERT_ERROR["get_string - failure"; .api.print_string2; enlist (1 2; `a`b); "not a string"]
 
 // get_dictionary
-/ .test.ASSERT_EQ["get_string"; .api.hidden_key[([] t: `timestamp$.z.p+1e9*til 9; chr:"ljppkgfgs"; is: 7 8 12 14 21 316 400 1000 6000i)]; -8!`t`chr`is]
+.test.ASSERT_EQ["get_string"; .api.hidden_key[([] t: `timestamp$.z.p+1e9*til 9; chr:"ljppkgfgs"; is: 7 8 12 14 21 316 400 1000 6000i)]; -8!`t`chr`is]
 // get_dictionary - error
-/ .test.ASSERT_ERROR["get_dictionary - failure"; .api.hidden_key; enlist 777; "not a table"]
+.test.ASSERT_ERROR["get_dictionary - failure"; .api.hidden_key; enlist 777; "not a table"]
 
 // get_row
 dictionaries: ([] time: `timestamp$2022.01.30D12:00:54.125743896 + 1000000000 * 1 + til 3; sym: `Green`Yellow`Red; go: "oxx"; miscellaneous: ("cow"; `lion; "eagle"));
@@ -364,16 +364,16 @@ dictionaries: ([] time: `timestamp$2022.01.30D12:00:54.125743896 + 1000000000 * 
 .test.ASSERT_EQ["append - compound"; .api.concat_list2[(::; `metals; `fire); ("clay"; 316)]; (::; `metals; `fire; "clay"; 316)]
 .test.ASSERT_EQ["append - long"; .api.concat_list2[1 2 3; 4 5]; 1 2 3 4 5]
 .test.ASSERT_EQ["append - symbol"; .api.concat_list2[`a`b`c; `d`e]; `a`b`c`d`e]
-/ // append - error
+// append - error
 .test.ASSERT_ERROR["append - failure"; .api.concat_list2; (1 2 3; "45"); "not a list or types do not match"]
 
-/ // push
+// push
 .test.ASSERT_EQ["push"; .api.create_compound_list2[5i]; (til 5), 5i]
 
-/ // push_raw
+// push_raw
 .test.ASSERT_EQ["push_raw"; .api.create_simple_list2[]; 2000.01.01+til 5]
 
-/ // push_symbol
+// push_symbol
 .test.ASSERT_EQ["push_symbol"; .api.create_symbol_list2[]; `Abraham`Isaac`Jacob`Joseph]
 
 
@@ -388,6 +388,34 @@ dictionaries: ([] time: `timestamp$2022.01.30D12:00:54.125743896 + 1000000000 * 
 // len - table
 .test.ASSERT_EQ["len table"; .api.numbers ([] x: til 10); "10 people are in numbers"]
 
+/ // set_type
+/ planet: .api.eden[];
+/ .test.ASSERT_EQ["set_qtype"; type planet; 112h]
+
+/ // set_attribute
+/ .test.ASSERT_EQ["set_attribute"; .api.labeling 1 2 3; `s#1 2 3]
+/ // set_attribute - failure
+/ .test.ASSERT_ERROR["set_attribute - failure"; .api.labeling; enlist 777; "not a simple list"]
+
+// q_ipc_encode
+list: (til 3; "abc"; 2018.02.18D04:30:00.000000000; `revive);
+.test.ASSERT_EQ["q_ipc_encode"; .api.encrypt[list]; bytes:-8!list]
+
+// q_ipc_encode - compress
+long_list: 1000#/: ("long"; `list);
+.test.ASSERT_EQ["q_ipc_encode - compress"; .api.encrypt[long_list]; long_bytes:-8!long_list]
+
+// q_ipc_decode
+.test.ASSERT_EQ["q_ipc_decode"; .api.decrypt[bytes]; list]
+
+// q_ipc_decode - decompress
+.test.ASSERT_EQ["q_ipc_decode - decompress"; .api.decrypt[long_bytes]; long_list]
+
+// q_ipc_decode - failure
+.test.ASSERT_ERROR["q_ipc_decode - failure"; .api.decrypt; enlist `hello; "not bytes"]
+
+// q_ipc_decode - failure2
+.test.ASSERT_ERROR["q_ipc_decode - failure2"; .api.decrypt; enlist 0x00aa12345678; "failed to decode"]
 
 //%% KVal as Constructors %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 
