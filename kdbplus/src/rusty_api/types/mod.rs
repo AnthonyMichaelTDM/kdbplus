@@ -1,99 +1,17 @@
+use super::{re_exports, K, S};
+use crate::qtype;
+use std::{borrow::Cow, ffi::CString};
+
+mod kdata;
+pub use kdata::*;
+mod ktable;
+pub use ktable::*;
+mod kdict;
+pub use kdict::*;
+
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 // >> Structs
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
-
-use super::{re_exports, SafeToCastFromKInner, K, S, KList};
-use crate::qtype;
-use std::{
-    borrow::Cow,
-    ffi::{CStr, CString},
-};
-
-/// Rust friendly wrapper for q Atoms and Lists.
-/// references are mutable to indicate that changes should propagate back to q.
-#[derive(Debug, Clone)]
-pub enum KData<'a, T>
-where
-    T: std::fmt::Debug + Clone,
-    [T]: ToOwned<Owned = Vec<T>>,
-{
-    /// wrapper for q atoms
-    /// Clone On Write (Cow) to allow zero copy when possible without sacrificing safety, and to allow for Atoms that are owned types (i.e. symbols)
-    Atom(Cow<'a, T>), // TODO: Should this be mut, const, or neither?
-
-    //List(&'a [T]), // TODO: Should this be mut, const, or neither?
-    /// wrapper for q lists
-    /// Clone On Write (Cow) to allow zero copy when possible without sacrificing safety, and to allow for ownership when necessary (i.e. merging 2 lists)
-    List(Cow<'a, [T]>),
-}
-
-impl<'a, T> KData<'a, T>
-where
-    T: 'a + std::fmt::Debug + SafeToCastFromKInner + std::clone::Clone,
-    [T]: 'a + ToOwned<Owned = Vec<T>>,
-{
-    #[inline]
-    /// # Safety
-    /// k must be a valid pointer to a valid K object
-    fn atom(k: &'a K) -> KData<'a, T> {
-        KData::Atom(Cow::Borrowed(k.cast()))
-    }
-
-    #[inline]
-    /// # Safety
-    /// k must be a valid pointer to a valid K object
-    fn guid_atom(k: &'a K) -> KData<'a, T> {
-        KData::Atom(Cow::Borrowed(k.cast_with_ptr_offset())) // while this is an atom, it is packed into a list of 1
-    }
-
-    #[inline]
-    /// # Safety
-    /// same requirements as [`K::as_slice`](crate::rusty_api)
-    /// but, additionally k must be a list of type T
-    fn list(k: &'a K) -> KData<'a, T> {
-        KData::List(Cow::Borrowed(k.as_slice().unwrap()))
-    }
-}
-
-/// for Symbols, which are backed by a [`S`] (*mut c_char) (a pointer) and therefore need to be converted to a owned String to guarentee memory safety
-impl<'a> KData<'a, String> {
-    #[inline]
-    /// # Safety
-    /// k must be a valid pointer to a valid K object
-    fn symbol(k: &'a K) -> KData<'a, String> {
-        KData::Atom(Cow::Owned(
-            String::from_utf8_lossy(
-                unsafe { CStr::from_ptr(k.cast::<S>().cast_const()) }.to_bytes(),
-            )
-            .to_string(),
-        ))
-    }
-
-    #[inline]
-    /// # Safety
-    /// k must be a valid pointer to a valid K object
-    fn symbol_list(k: &'a K) -> KData<'a, String> {
-        KData::List(Cow::Owned(
-            k.as_slice::<S>()
-                .unwrap()
-                .iter()
-                .map(|s| {
-                    String::from_utf8_lossy(unsafe { CStr::from_ptr(*s) }.to_bytes()).to_string()
-                })
-                .collect::<Vec<String>>(),
-        ))
-    }
-}
-
-/// generic utility functions
-impl<'a, T:std::fmt::Debug + Clone> KData<'a, T> {
-    pub fn len(&self) -> i64 {
-        match self {
-            KData::Atom(_) => 1,
-            KData::List(l) => l.len().try_into().unwrap(),
-        }
-    }
-}
 
 /// intuitive rust wrappers for q types, allowing for idiomatic rust code
 /// that can take full advantage of rust's powerful pattern matching and type system
@@ -157,10 +75,10 @@ pub enum KVal<'a> {
     String(Cow<'a, str>),
     // TODO: Foreign
     /// a dictionary is a KList with 2 elements, the first being the keys, the second being the values
-    Dictionary(Box<KVal<'a>>, Box<KVal<'a>>),
+    Dictionary(KDict<'a>),
     // TODO: Sorted Dictionary
     /// behind the scenes, a table is just a specialized dictionary where keys are symbols and values are lists
-    Table(Box<KVal<'a>>),
+    Table(KTable<'a>),
     /// q Error, created by krr or orr. we use Cow<str> in Rust to avoid reading invalid pointers if/when the data is dropped
     /// # Note
     /// * the inner string must be null terminated
@@ -173,24 +91,29 @@ impl<'a> KVal<'a> {
     /// Create a new KVal from a reference to a [`K`](type.K.html) value.
     ///
     /// # Examples
-    /// TODO: test this example, make sure rust doesn't take ownership of the value
     /// ```no_run
     /// use kdbplus::rusty_api::K;
     /// use kdbplus::rusty_api::types::{KVal, KData};
     /// use kdbplus::rusty_api::*;
     ///
     /// #[no_mangle]
-    /// pub unsafe extern "C" fn plus_one_int(k: *const K) -> *const K {
-    ///     // assuming k is a non-null, and valid, pointer to a K value
-    ///     std::panic::catch_unwind(move || {
-    ///         let KVal::Int(KData::Atom(value)) = KVal::from(unsafe{&*k}) else {
-    ///             return new_error("type error\0");
-    ///         };
-    ///         new_int(value + 1)
-    ///     })
-    ///     .or_else::<u8, _>(|_| Ok(new_error("rust panic\0")))
-    ///     .unwrap()
+    /// pub extern "C" fn modify_long_list_a_bit(long_list: *const K) -> *const K {
+    ///     match KVal::from(unsafe { &*long_list }, None) {
+    ///         KVal::Long(KData::List(mut list)) => {
+    ///             if list.len() < 2 {
+    ///                 return new_error("this list is not long enough. how ironic...\0");
+    ///             }
+    ///             list.to_mut()[1] = 30000_i64;
+    ///             KVal::Long(KData::List(list)).to_k()
+    ///         }
+    ///         _ => new_error("invalid type\0"),
+    ///     }
     /// }
+    /// ```
+    /// ```q
+    /// q)modify_long_list_a_bit: LIBPATH_ (`modify_long_list_a_bit; 1)
+    /// q)modify_long_list_a_bit 1 2 3
+    /// 1 30000 3
     /// ```
     ///
     /// # Note
@@ -265,18 +188,10 @@ impl<'a> KVal<'a> {
             /* 18   */ qtype::SECOND_LIST => KVal::Second(KData::list(k)),
             /* 19   */ qtype::TIME_LIST => KVal::Time(KData::list(k)),
             /* 20   */ qtype::ENUM_LIST => KVal::Enum(KData::list(k), enum_source),
-            /* 98   */ qtype::TABLE => KVal::Table(Box::new(KVal::from_raw(k.cast::<*mut K>().cast_const(), enum_source))),
-            /* 99   */ qtype::DICTIONARY => {
-                let slice = k.as_slice::<*mut K>().unwrap();
-                assert!(slice.len() == 2, "invalid dictionary, must be a list of two items");
-                KVal::Dictionary(
-                    Box::new(KVal::from_raw(slice[0].cast_const(), enum_source)), 
-                    Box::new(KVal::from_raw(slice[1].cast_const(), enum_source))
-                )
-            },
+            /* 98   */ qtype::TABLE => KVal::Table(KTable::new_from_k(k)),
+            /* 99   */ qtype::DICTIONARY => KVal::Dictionary(KDict::new_from_k(k)),
             /* 112  */ qtype::FOREIGN => todo!("Foreign objects not yet implemented"),
-            /* 127  */
-            qtype::SORTED_DICTIONARY => todo!("Sorted Dictionaries not yet implemented"), // probably reuse the dictionary type
+            /* 127  */ qtype::SORTED_DICTIONARY => KVal::Dictionary(KDict::new_from_k(k)),
             _ => KVal::Null,
         }
     }
@@ -288,6 +203,32 @@ impl<'a> KVal<'a> {
     /// dereferences a raw pointer.
     ///
     /// see [`from`](`KVal`) for more information, as this is just a wrapper around that function.
+    ///
+    /// # Example
+    /// ```no_run
+    /// use kdbplus::rusty_api::K;
+    /// use kdbplus::rusty_api::types::{KVal, KData};
+    /// use kdbplus::rusty_api::*;
+    ///
+    /// #[no_mangle]
+    /// pub extern "C" fn modify_long_list_a_bit(long_list: *const K) -> *const K {
+    ///     match KVal::from_raw(long_list, None) {
+    ///         KVal::Long(KData::List(mut list)) => {
+    ///             if list.len() < 2 {
+    ///                 return new_error("this list is not long enough. how ironic...\0");
+    ///             }
+    ///             list.to_mut()[1] = 30000_i64;
+    ///             KVal::Long(KData::List(list)).to_k()
+    ///         }
+    ///         _ => new_error("invalid type\0"),
+    ///     }
+    /// }
+    /// ```
+    /// ```q
+    /// q)modify_long_list_a_bit: LIBPATH_ (`modify_long_list_a_bit; 1)
+    /// q)modify_long_list_a_bit 1 2 3
+    /// 1 30000 3
+    /// ```
     ///
     /// # Note
     /// * given enum source will be applied to all enum variants, recursively (e.g. enums in a compound list)
@@ -650,12 +591,22 @@ impl<'a> KVal<'a> {
             KVal::String(list) => re_exports::new_string(&list),
             KVal::Error(err) => re_exports::new_error(&err),
             KVal::Null => re_exports::new_null(),
+            KVal::Dictionary(dict) => unsafe {
+                re_exports::new_dictionary(dict.keys.to_k(), dict.values.to_k())
+            },
+            KVal::Table(table) => unsafe {
+                re_exports::flip(re_exports::new_dictionary(
+                    table.dict.keys.to_k(),
+                    table.dict.values.to_k(),
+                ))
+            },
         }
     }
 
     /// Get the length of q object. The meaning of the returned value varies according to the type:
     /// - atom: 1
     /// - list: The number of elements in the list.
+    /// - string: The number of characters in the string.
     /// - table: The number of rows.
     /// - dictionary: The number of keys.
     /// - general null: 1
@@ -666,7 +617,7 @@ impl<'a> KVal<'a> {
     ///
     /// #[no_mangle]
     /// pub extern "C" fn numbers(obj: *const K) -> *const K{
-    ///   let count=format!("{} people are in numbers", KVal::from_raw(obj).len());
+    ///   let count=format!("{} people are in numbers", KVal::from_raw(obj,None).len());
     ///   new_string(&count)
     /// }
     /// ```
@@ -704,13 +655,75 @@ impl<'a> KVal<'a> {
             Minute(data) => data.len(),
             Second(data) => data.len(),
             Time(data) => data.len(),
-            Enum(data,_) => data.len(),
-            String(_) => 1,
+            Enum(data, _) => data.len(),
+            String(string) => string.len().try_into().unwrap(),
             Error(_) => 1,
-            Table(inner) => todo!(),
-            Dictionary(keys, _) => keys.len(),
+            Table(table) => table.len(),
+            Dictionary(dict) => dict.len(),
             Null => 1,
         }
+    }
 
+    /// is the kval a list?
+    ///
+    /// TODO: example
+    ///
+    pub fn is_list(&self) -> bool {
+        use KData::*;
+        use KVal::*; // for brevity // for brevity
+        matches!(
+            self,
+            CompoundList(_)
+                | Bool(List(_))
+                | Guid(List(_))
+                | Byte(List(_))
+                | Short(List(_))
+                | Int(List(_))
+                | Long(List(_))
+                | Real(List(_))
+                | Float(List(_))
+                | Symbol(List(_))
+                | Timestamp(List(_))
+                | Month(List(_))
+                | Date(List(_))
+                | Datetime(List(_))
+                | Timespan(List(_))
+                | Minute(List(_))
+                | Second(List(_))
+                | Time(List(_))
+                | Enum(List(_), _)
+                | String(_)
+        )
+    }
+
+    /// is the object an atom?
+    ///
+    /// TODO: example
+    ///
+    pub fn is_atom(&self) -> bool {
+        use KData::*;
+        use KVal::*; // for brevity // for brevity
+        matches!(
+            self,
+            Char(_)
+                | Bool(Atom(_))
+                | Guid(Atom(_))
+                | Byte(Atom(_))
+                | Short(Atom(_))
+                | Int(Atom(_))
+                | Long(Atom(_))
+                | Real(Atom(_))
+                | Float(Atom(_))
+                | Symbol(Atom(_))
+                | Timestamp(Atom(_))
+                | Month(Atom(_))
+                | Date(Atom(_))
+                | Datetime(Atom(_))
+                | Timespan(Atom(_))
+                | Minute(Atom(_))
+                | Second(Atom(_))
+                | Time(Atom(_))
+                | Enum(Atom(_), _)
+        )
     }
 }

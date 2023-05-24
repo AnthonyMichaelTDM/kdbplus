@@ -406,9 +406,9 @@ pub fn new_time(milliseconds: I) -> *const K {
 /// #[no_mangle]
 /// pub extern "C" fn create_enum(source: *const K, index: *const K) -> *const K{
 ///     // Error if the specified enum source does not exist or it is not a symbol list or the index is out of enum range
-///     match (KVal::from_raw(source), KVal::from_raw(index)) {
-///         (KVal::Symbol(KData::Atom(&source)), KVal::Long(KData::Atom(&index))) => {
-///             new_enum(unsafe {S_to_str(source.clone())}, index)
+///     match (KVal::from_raw(source, None), KVal::from_raw(index, None)) {
+///         (KVal::Symbol(KData::Atom(source)), KVal::Long(KData::Atom(index))) => {
+///             new_enum(&source, *index)
 ///         }
 ///         _ => new_error("type error, source must be symbol atom and index must be long atom\0")
 ///     }
@@ -550,7 +550,6 @@ pub unsafe fn new_dictionary(keys: *const K, values: *const K) -> *const K {
 /// Constructor of q general null.
 /// # Example
 /// ```no_run
-/// use kdbplus::qtype;
 /// use kdbplus::rusty_api::*;
 /// use kdbplus::rusty_api::types::*;
 /// use std::borrow::Cow;
@@ -558,11 +557,11 @@ pub unsafe fn new_dictionary(keys: *const K, values: *const K) -> *const K {
 ///
 /// #[no_mangle]
 /// pub extern "C" fn nullify(_: *const K) -> *const K {
-///     KVal::CompoundList(Cow::Borrowed(&[
-///         new_null().cast_mut(),
-///         new_string("null is not a general null").cast_mut(),
-///         new_null().cast_mut(),
-///     ])).to_k()
+///     KVal::CompoundList(vec![
+///         KVal::Null,
+///         KVal::String(Cow::Borrowed("null is not a general null")),
+///         KVal::Null,
+///     ]).to_k()
 /// }
 /// ```
 /// ```q
@@ -619,9 +618,9 @@ pub fn new_error_os(message: &str) -> *const K {
 /// #[no_mangle]
 /// extern "C" fn no_panick(func: *const K, args: *const K) -> *const K{
 ///     let result=unsafe{error_to_string(apply(func, args))};
-///     match KVal::from_raw(result) {
-///         KVal::Error(&error) => {
-///             println!("FYI: {}", unsafe { S_to_str(error) } );
+///     match KVal::from_raw(result, None) {
+///         KVal::Error(error) => {
+///             println!("FYI: {}", &error );
 ///             // Decrement reference count of the error object which is no longer used.
 ///             unsafe{decrement_reference_count(result)};
 ///             KNULL
@@ -664,9 +663,9 @@ pub unsafe fn error_to_string(error: *const K) -> *const K {
 /// use kdbplus::rusty_api::types::*;
 ///
 /// fn love_even(arg: *const K) -> *const K{
-///     match KVal::from_raw(arg) {
-///         KVal::Int(KData::Atom(&int)) => {
-///             if int % 2 == 0{
+///     match KVal::from_raw(arg, None) {
+///         KVal::Int(KData::Atom(int)) => {
+///             if *int % 2 == 0{
 ///                 // Silent for even value
 ///                 KNULL
 ///             }
@@ -689,7 +688,7 @@ pub unsafe fn error_to_string(error: *const K) -> *const K {
 ///         // Propagate the error
 ///         return result;
 ///     }
-///     match KVal::from_raw(result) {
+///     match KVal::from_raw(result, None) {
 ///         KVal::Error(_) => {
 ///             // KNULL
 ///             println!("this is KNULL");
@@ -817,22 +816,20 @@ pub unsafe fn flip(dictionary: *const K) -> *const K {
 /// pub extern "C" fn create_table2(_: *const K) -> *const K{
 ///   // Build keys
 ///   let keys = KVal::Symbol(KData::List(std::borrow::Cow::Borrowed(&[
-///     unsafe { enumerate(str_to_S!("time")) },
-///     unsafe { enumerate_n(str_to_S!("temperature_and_humidity"),11) },
+///     "time".to_string(),
+///     "temperature".to_string(),
 ///   ]))).to_k();
 ///   
 ///   // Build values
 ///   let time = KVal::Timestamp(KData::List(
 ///     std::borrow::Cow::Borrowed(&[119067859167018272_i64, 201766609419710368, 271897944018691392])
-///   )).to_k().cast_mut();
+///   ));
 ///   // 2003.10.10D02:24:19.167018272 2006.05.24D06:16:49.419710368 2008.08.12D23:12:24.018691392
 ///   let temperature = KVal::Float(KData::List(
 ///     std::borrow::Cow::Borrowed(&[22.1_f64, 24.7, 30.5])
-///   )).to_k().cast_mut();
+///   ));
 ///
-///   let values = KVal::CompoundList(
-///     std::borrow::Cow::Borrowed(&[time, temperature])
-///   ).to_k();
+///   let values = KVal::CompoundList(vec![time, temperature]).to_k();
 ///   
 ///   unsafe{flip(new_dictionary(keys, values))}
 /// }
@@ -1038,15 +1035,15 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 ///
 /// // Callback for some message queue.
 /// extern "C" fn callback(socket: I) -> *const K {
-///   let mut buffer: [*mut K; 1]=[0 as *mut K];
-///   unsafe{libc::read(socket, buffer.as_mut_ptr() as *mut V, 8)};
-///   // Call `shout` function on q side with the received data.
-///   let result=unsafe { error_to_string(unsafe{native::k(0, str_to_S!("shout"), buffer[0], KNULL)}) };
-///   if let KVal::Error(& err_str) = KVal::from(unsafe{&*result}) {
-///     eprintln!("Execution error: {}", unsafe { S_to_str(err_str) });
-///     unsafe { decrement_reference_count(result) };
-///   };
-///   KNULL
+///     let mut buffer: [*mut K; 1] = [KNULL_MUT];
+///     unsafe { libc::read(socket, buffer.as_mut_ptr() as *mut V, 8) };
+///     // Call `shout` function on q side with the received data.
+///     let result = unsafe { error_to_string(native::k(0, str_to_S!("shout"), buffer[0], KNULL)) };
+///     if let KVal::Error(err) = KVal::from_raw(result, None) {
+///         eprintln!("Execution error: {}", err.as_ref());
+///         unsafe { decrement_reference_count(result) };
+///     };
+///     KNULL
 /// }
 ///
 /// #[no_mangle]
@@ -1060,10 +1057,10 @@ pub fn destroy_socket_if(socket: I, condition: bool) {
 ///     // Lock symbol in a worker thread.
 ///     pin_symbol();
 ///     let handle = std::thread::spawn(move || {
-///         let precious = KVal::Symbol(KData::List(Cow::from(vec![
-///             str_to_S!("belief"),
-///             str_to_S!("love"),
-///             str_to_S!("hope"),
+///         let precious = KVal::Symbol(KData::List(Cow::Borrowed(&[
+///             "belief".to_string(),
+///             "love".to_string(),
+///             "hope".to_string(),
 ///         ])))
 ///         .to_k()
 ///         .cast_mut();
@@ -1201,9 +1198,9 @@ pub unsafe fn drop_q_object(obj: *const K) -> *const K {
 ///     let obj=unsafe{(*planet.cast_mut()).as_mut_slice_unchecked::<*mut K>()[1] as *const Planet};
 ///     println!("{:?}", unsafe{obj.as_ref()}.unwrap());
 ///     let mut desc=unsafe{obj.as_ref()}.unwrap().description();
-///     match KVal::from_raw(action) {
-///         KVal::Bool(KData::Atom(&b)) => {
-///             if b {
+///     match KVal::from_raw(action, None) {
+///         KVal::Bool(KData::Atom(b)) => {
+///             if *b {
 ///                 desc+=" You shall not curse what God blessed."
 ///             } else {
 ///                 desc+=" I perceived I could find favor of God by blessing them.";
@@ -1282,37 +1279,34 @@ pub fn days_to_ymd(days: I) -> I {
 ///
 /// #[no_mangle]
 /// pub extern "C" fn drift(_: *const K) -> *const K {
-///     KVal::CompoundList(Cow::Borrowed(&[
-///         KVal::Int(KData::Atom(&12)).to_k().cast_mut(),
-///         KVal::Int(KData::Atom(&34)).to_k().cast_mut(),
-///         KVal::Symbol(KData::Atom(&str_to_S!("vague")))
-///             .to_k()
-///             .cast_mut(),
-///         KVal::Int(KData::Atom(&-3000)).to_k().cast_mut(),
-///     ]))
+///     KVal::CompoundList(vec![
+///         KVal::Int(KData::Atom(Cow::Borrowed(&12))),
+///         KVal::Int(KData::Atom(Cow::Borrowed(&34))),
+///         KVal::Symbol(KData::Atom(Cow::Owned("vague".to_string()))),
+///         KVal::Int(KData::Atom(Cow::Borrowed(&-3000))),
+///     ])
 ///     .to_k()
 /// }
 ///
 /// #[no_mangle]
 /// pub extern "C" fn drift2(_: *const K) -> *const K {
-///   let existing_list = KVal::Enum(KData::List(Cow::from(vec![0_i64, 1]))); // error messages returned by 'as_compound_list' are null terminated
-///  
+///     let existing_list = KVal::Enum(KData::List(Cow::Borrowed(&[0_i64, 1])), Some("enum")); // error messages returned by 'as_compound_list' are null terminated
+///
 ///     // Convert a list of enum indices into a compound list while creating enum values from the indices which are tied with
 ///     //  an existing enum variable named "enum", i.e., Enum indices [0, 1] in the code are cast into `(enum[0]; enum[1])`.
-///     let existing_list = match existing_list.to_compound_list(Some("enum")) {
+///     let existing_list = match existing_list.to_compound_list() {
 ///         Ok(compound) => compound,
 ///         Err(e_str) => return new_error(e_str),
 ///     };
-///  
+///
 ///     // another compound list we want to add to the existing list
-///     let binding = [
-///         to_k!(KVal::Enum(KData::Atom(&2)), "enum2").cast_mut(), // `enum2[2]`.
-///         KVal::Month(KData::Atom(&3)).to_k().cast_mut(),
-///     ];
-///     let other_list = KVal::CompoundList(Cow::Borrowed(&binding));
-///  
+///     let other_list = KVal::CompoundList(vec![
+///         KVal::Enum(KData::Atom(Cow::Borrowed(&2)), Some("enum2")), // `enum2[2]`.
+///         KVal::Month(KData::Atom(Cow::Borrowed(&3))),
+///     ]);
+///
 ///     // return the joined list
-///     match existing_list.join(other_list) {
+///     match KVal::join(existing_list, other_list) {
 ///         Ok(joined) => joined.to_k(),
 ///         Err(e_str) => new_error(e_str),
 ///     }

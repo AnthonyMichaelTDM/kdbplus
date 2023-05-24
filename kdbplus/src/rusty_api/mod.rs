@@ -294,11 +294,8 @@ impl K {
     ///
     /// # Note
     /// is_atom != !is_list
-    ///
-    /// excludes chars
-    ///
     pub fn is_atom(&self) -> bool {
-        self.qtype < 0 && self.qtype >= -20 && self.qtype != qtype::CHAR
+        self.qtype < 0 && self.qtype >= -20
     }
 
     #[inline]
@@ -306,8 +303,8 @@ impl K {
     ///
     /// # Note
     /// is_atom != !is_list
-    /// excludes strings, compound lists, dictionaries, and tables
+    /// excludes compound lists, dictionaries, and tables
     pub fn is_list(&self) -> bool {
-        self.qtype > 0 && self.qtype <= 20 && self.qtype != qtype::STRING
+        self.qtype > 0 && self.qtype <= 20
     }
 }

@@ -135,8 +135,7 @@ pub extern "C" fn must_be_int(obj: *const K) -> *const K {
 // used to be the example for as_mut_slice
 #[no_mangle]
 pub extern "C" fn modify_long_list_a_bit(long_list: *const K) -> *const K {
-    let val = KVal::from_raw(long_list, None);
-    match val {
+    match KVal::from_raw(long_list, None) {
         KVal::Long(KData::List(mut list)) => {
             if list.len() < 2 {
                 return new_error("this list is not long enough. how ironic...\0");
@@ -399,7 +398,7 @@ pub extern "C" fn labeling(mut list: *const K) -> *const K {
 /// Example of `len`.
 #[no_mangle]
 pub extern "C" fn numbers(obj: *const K) -> *const K {
-    let count = format!("{} people are in numbers", KVal::from_raw(obj,None).len());
+    let count = format!("{} people are in numbers", KVal::from_raw(obj, None).len());
     new_string(&count)
 }
 
@@ -420,6 +419,16 @@ pub extern "C" fn decrypt(list: *const K) -> *const K {
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                            Constructors                              //
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
+
+#[no_mangle]
+pub extern "C" fn nullify(_: *const K) -> *const K {
+    KVal::CompoundList(vec![
+        KVal::Null,
+        KVal::String(Cow::Borrowed("null is not a general null")),
+        KVal::Null,
+    ])
+    .to_k()
+}
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                           KVal as a constructor                      //
