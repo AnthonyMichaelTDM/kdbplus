@@ -2,7 +2,7 @@
 // >> Structs
 //++++++++++++++++++++++++++++++++++++++++++++++++++//
 
-use super::{re_exports, SafeToCastFromKInner, K, S};
+use super::{re_exports, SafeToCastFromKInner, K, S, KList};
 use crate::qtype;
 use std::{
     borrow::Cow,
@@ -156,9 +156,11 @@ pub enum KVal<'a> {
     /// Note: the C api uses [`S`] (*mut c_char) for strings. we use a Cow smart pointer so it's a zero-copy &str wrapper for read-only operations, that is converted to an owned string when needed in Rust.
     String(Cow<'a, str>),
     // TODO: Foreign
-    // TODO: Dictionary
+    /// a dictionary is a KList with 2 elements, the first being the keys, the second being the values
+    Dictionary(Box<KVal<'a>>, Box<KVal<'a>>),
     // TODO: Sorted Dictionary
-    // TODO: Table
+    /// behind the scenes, a table is just a specialized dictionary where keys are symbols and values are lists
+    Table(Box<KVal<'a>>),
     /// q Error, created by krr or orr. we use Cow<str> in Rust to avoid reading invalid pointers if/when the data is dropped
     /// # Note
     /// * the inner string must be null terminated
@@ -263,8 +265,15 @@ impl<'a> KVal<'a> {
             /* 18   */ qtype::SECOND_LIST => KVal::Second(KData::list(k)),
             /* 19   */ qtype::TIME_LIST => KVal::Time(KData::list(k)),
             /* 20   */ qtype::ENUM_LIST => KVal::Enum(KData::list(k), enum_source),
-            /* 99   */ qtype::TABLE => todo!("Tables are not yet implemented"),
-            /* 101  */ qtype::DICTIONARY => todo!("Dictionaries not yet implemented"),
+            /* 98   */ qtype::TABLE => KVal::Table(Box::new(KVal::from_raw(k.cast::<*mut K>().cast_const(), enum_source))),
+            /* 99   */ qtype::DICTIONARY => {
+                let slice = k.as_slice::<*mut K>().unwrap();
+                assert!(slice.len() == 2, "invalid dictionary, must be a list of two items");
+                KVal::Dictionary(
+                    Box::new(KVal::from_raw(slice[0].cast_const(), enum_source)), 
+                    Box::new(KVal::from_raw(slice[1].cast_const(), enum_source))
+                )
+            },
             /* 112  */ qtype::FOREIGN => todo!("Foreign objects not yet implemented"),
             /* 127  */
             qtype::SORTED_DICTIONARY => todo!("Sorted Dictionaries not yet implemented"), // probably reuse the dictionary type
@@ -698,6 +707,8 @@ impl<'a> KVal<'a> {
             Enum(data,_) => data.len(),
             String(_) => 1,
             Error(_) => 1,
+            Table(inner) => todo!(),
+            Dictionary(keys, _) => keys.len(),
             Null => 1,
         }
 
