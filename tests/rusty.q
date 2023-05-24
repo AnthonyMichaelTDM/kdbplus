@@ -47,6 +47,8 @@ LIBPATH_: `librusty_api_examples 2:
 .api.drift: LIBPATH_ (`drift; 1);
 // simple_to_compound
 .api.drift2: LIBPATH_ (`drift2; 1);
+// qnull_base::J
+.api.long_borders: LIBPATH_ (`long_borders; 1);
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                          	  Tests    	        		                  //
@@ -97,7 +99,8 @@ enum: `mashroom`broccoli`cucumber;
 enum2: `mackerel`swordfish`tuna;
 .test.ASSERT_EQ["simple_to_compound"; .api.drift2[]; (`enum$`mashroom; `enum$`broccoli; `enum2$`tuna; 2000.04m)]
 
-
+// qnull_base::J
+.test.ASSERT_EQ["qnull_base::J"; .api.long_borders[]; (0Np; 0Wp; -0Wp)]
 
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 //                          	  Result   	        		                  //

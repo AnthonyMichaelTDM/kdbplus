@@ -58,7 +58,7 @@ pub extern "C" fn int_borders(_: *const K) -> *const K {
 /// Example of `qnull::J`, `qinf::J` and `qninf::J`.
 #[no_mangle]
 pub extern "C" fn long_borders(_: *const K) -> *const K {
-    KVal::Long(KData::List(Cow::from(vec![
+    KVal::Timestamp(KData::List(Cow::Borrowed(&[
         qnull_base::J,
         qinf_base::J,
         qninf_base::J,
@@ -377,7 +377,8 @@ pub extern "C" fn create_symbol_list2(_: *const K) -> *const K {
 /// print the debug representation of a K object
 #[no_mangle]
 pub extern "C" fn print(k: *const K) -> *const K {
-    println!("k: {:?}", unsafe { *k });
+    println!("k obj: {:?}", unsafe { *k });
+    println!("k val: {:?}", KVal::from_raw(k, None));
     KNULL
 }
 

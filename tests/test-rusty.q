@@ -406,4 +406,5 @@ enum: `a`b;
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 // Show result.
-/ .test.DISPLAY_RESULT[]
+.test.DISPLAY_RESULT[]
+exit 0
