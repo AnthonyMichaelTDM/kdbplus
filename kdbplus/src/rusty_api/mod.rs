@@ -51,16 +51,16 @@ pub const KNULL_MUT: *mut K = std::ptr::null_mut::<K>();
 /// should not be implemented by user code.
 pub trait SafeToCastFromKInner {
     // because this function takes ownership of inner, it is safe to cast it to a mutable reference
-    fn cast<'a>(k: &'a K) -> &'a mut Self;
+    fn cast(k: &K) -> &Self;
     // because this function takes ownership of inner, it is safe to cast it to a mutable reference
-    fn cast_with_ptr_offset<'a>(k: &'a K) -> &'a mut Self;
+    fn cast_with_ptr_offset(k: &K) -> &Self;
 }
 
 macro_rules! impl_safe_cast_for {
     ($($t:ty),*) => {$(
         impl SafeToCastFromKInner for $t {
             #[inline]
-            fn cast<'a>(k: &'a K) -> &'a mut Self {
+            fn cast(k: &K) -> &Self {
                 // get a pointer to the start of the block of memory used by the union
                 let ptr = unsafe { &k.value.byte_array as *const u8 };
                 if ptr.is_null() {
@@ -72,7 +72,7 @@ macro_rules! impl_safe_cast_for {
             }
 
             #[inline]
-            fn cast_with_ptr_offset<'a>(k: &'a K) -> &'a mut Self {
+            fn cast_with_ptr_offset(k: &K) -> &Self {
                 // get a pointer to the start of the block of memory used by the union
                 let ptr = unsafe { &k.value.byte_array as *const u8 };
                 if ptr.is_null() {
@@ -208,12 +208,12 @@ pub struct K {
 // these are accessors for the (untagged) union represented by value
 impl K {
     #[inline]
-    pub fn cast<'a, T: SafeToCastFromKInner>(&'a self) -> &'a mut T {
+    pub fn cast<T: SafeToCastFromKInner>(&self) -> &T {
         T::cast(self)
     }
 
     #[inline]
-    pub fn cast_with_ptr_offset<'a, T: SafeToCastFromKInner>(&'a self) -> &'a mut T {
+    pub fn cast_with_ptr_offset<T: SafeToCastFromKInner>(&self) -> &T {
         T::cast_with_ptr_offset(self)
     }
 

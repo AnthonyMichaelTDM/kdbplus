@@ -97,12 +97,10 @@ pub extern "C" fn char_border(_: *const K) -> *const K {
 /// Example of `qnull::S`.
 #[no_mangle]
 pub extern "C" fn string_borders(_: *const K) -> *const K {
-    KVal::CompoundList(Cow::Borrowed(&[
-        KVal::Symbol(KData::Atom(Cow::Owned(qnull_base::S.to_string())))
-            .to_k()
-            .cast_mut(),
-        KVal::String(Cow::Borrowed(qnull_base::S)).to_k().cast_mut(),
-    ]))
+    KVal::CompoundList(vec![
+        KVal::Symbol(KData::Atom(Cow::Owned(qnull_base::S.to_string()))),
+        KVal::String(Cow::Borrowed(qnull_base::S)),
+    ])
     .to_k()
 }
 
@@ -121,7 +119,7 @@ pub extern "C" fn pingpong(_: *const K) -> *const K {
 /// dereferences a raw pointer
 #[no_mangle]
 pub extern "C" fn must_be_int(obj: *const K) -> *const K {
-    match KVal::from_raw(obj) {
+    match KVal::from_raw(obj, None) {
         KVal::Int(KData::Atom(_)) => KNULL,
         _ => unsafe { native::krr(null_terminated_str_to_const_S("not an int\0")) },
     }
@@ -137,7 +135,7 @@ pub extern "C" fn must_be_int(obj: *const K) -> *const K {
 // used to be the example for as_mut_slice
 #[no_mangle]
 pub extern "C" fn modify_long_list_a_bit(long_list: *const K) -> *const K {
-    let val = KVal::from_raw(long_list);
+    let val = KVal::from_raw(long_list, None);
     match val {
         KVal::Long(KData::List(mut list)) => {
             if list.len() < 2 {
@@ -152,7 +150,7 @@ pub extern "C" fn modify_long_list_a_bit(long_list: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_bool(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Bool(KData::Atom(b)) => {
             println!("bool: {}", b);
             KNULL
@@ -163,7 +161,7 @@ pub extern "C" fn print_bool(atom: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_guid(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Guid(KData::Atom(guid)) => {
             let strguid = guid
                 .iter()
@@ -185,7 +183,7 @@ pub extern "C" fn print_guid(atom: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_byte(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Byte(KData::Atom(byte)) => {
             println!("byte: {:#4x}", *byte);
             KNULL
@@ -196,7 +194,7 @@ pub extern "C" fn print_byte(atom: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_short(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Short(KData::Atom(short)) => {
             println!("short: {}", short);
             KNULL
@@ -220,7 +218,7 @@ pub extern "C" fn print_int(atom: *const K) -> *const K {
         }};
     }
 
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Int(KData::Atom(int)) => print_int!(int),
         Month(Atom(month)) => print_int!(month),
         Date(Atom(date)) => print_int!(date),
@@ -245,18 +243,18 @@ pub extern "C" fn print_long(atom: *const K) -> *const K {
             KNULL
         }};
     }
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Long(KData::Atom(long)) => print_long!(long),
         Timestamp(Atom(timestamp)) => print_long!(timestamp),
         Timespan(Atom(timespan)) => print_long!(timespan),
-        Enum(Atom(en)) => print_long!(en),
+        Enum(Atom(en), _) => print_long!(en),
         _ => new_error("not a long\0"),
     }
 }
 
 #[no_mangle]
 pub extern "C" fn print_real(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Real(KData::Atom(real)) => {
             println!("real: {}", real);
             KNULL
@@ -268,7 +266,7 @@ pub extern "C" fn print_real(atom: *const K) -> *const K {
 #[no_mangle]
 pub extern "C" fn print_float(atom: *const K) -> *const K {
     // we have to explicitly handle every valid case
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Float(KData::Atom(float)) => {
             println!("float: {:.8}", float);
             KNULL
@@ -283,7 +281,7 @@ pub extern "C" fn print_float(atom: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_char(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Char(char) => {
             println!("char: \"{}\"", char);
             KNULL
@@ -294,7 +292,7 @@ pub extern "C" fn print_char(atom: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_symbol2(atom: *const K) -> *const K {
-    match KVal::from_raw(atom) {
+    match KVal::from_raw(atom, None) {
         KVal::Symbol(KData::Atom(symbol)) => {
             println!("symbol: '{}", symbol);
             KNULL
@@ -305,7 +303,7 @@ pub extern "C" fn print_symbol2(atom: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_string(list: *const K) -> *const K {
-    match KVal::from_raw(list) {
+    match KVal::from_raw(list, None) {
         KVal::String(string) => {
             println!("string: \"{}\"", &string.into_owned());
             KNULL
@@ -316,7 +314,7 @@ pub extern "C" fn print_string(list: *const K) -> *const K {
 
 #[no_mangle]
 pub extern "C" fn print_string2(list: *const K) -> *const K {
-    match KVal::from_raw(list) {
+    match KVal::from_raw(list, None) {
         KVal::String(string) => {
             println!("string: \"{}\"", &string.into_owned());
             KNULL
@@ -340,10 +338,10 @@ pub extern "C" fn pick_row(obj: *const K, index: *const K) -> *const K {
 /// example of KVal::join()
 #[no_mangle]
 pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
-    let list1 = KVal::from_raw(list1);
-    let list2 = KVal::from_raw(list2);
+    let list1 = KVal::from_raw(list1, None);
+    let list2 = KVal::from_raw(list2, None);
 
-    match list1.join(list2) {
+    match KVal::join(list1, list2) {
         Ok(list3) => list3.to_k(),
         Err(e) => new_error(e),
     }
@@ -353,12 +351,11 @@ pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
 pub extern "C" fn create_compound_list2(int: *const K) -> *const K {
     // we don't actually need to check if int is an int, because
     // compound lists can contain any type of K object
-    let simp_list: KVal = KVal::Long(KData::List(Cow::from((0..5).collect::<Vec<i64>>())));
-    let comp_list: KVal = simp_list.to_compound_list(None).unwrap();
-    comp_list
-        .join(KVal::CompoundList(Cow::Borrowed(&[int.cast_mut()])))
-        .unwrap()
-        .to_k()
+    let base_list: KVal = KVal::Long(KData::List(Cow::from((0..5).collect::<Vec<i64>>())))
+        .to_compound_list()
+        .unwrap();
+    let other_list: KVal = KVal::CompoundList(vec![KVal::from_raw(int, None)]);
+    KVal::join(base_list, other_list).unwrap().to_k()
 }
 
 #[no_mangle]
@@ -376,7 +373,7 @@ pub extern "C" fn create_symbol_list2(_: *const K) -> *const K {
 /// print the debug representation of a K object
 #[no_mangle]
 pub extern "C" fn print(k: *const K) -> *const K {
-    println!("k: {:?}", unsafe{*k});
+    println!("k: {:?}", unsafe { *k });
     KNULL
 }
 
@@ -430,37 +427,34 @@ pub extern "C" fn decrypt(list: *const K) -> *const K {
 // make a compound list from scratch
 #[no_mangle]
 pub extern "C" fn drift(_: *const K) -> *const K {
-    KVal::CompoundList(Cow::Borrowed(&[
-        KVal::Int(KData::Atom(Cow::Borrowed(&12))).to_k().cast_mut(),
-        KVal::Int(KData::Atom(Cow::Borrowed(&34))).to_k().cast_mut(),
-        KVal::Symbol(KData::Atom(Cow::Owned("vague".to_string())))
-            .to_k()
-            .cast_mut(),
-        KVal::Int(KData::Atom(Cow::Borrowed(&-3000))).to_k().cast_mut(),
-    ]))
+    KVal::CompoundList(vec![
+        KVal::Int(KData::Atom(Cow::Borrowed(&12))),
+        KVal::Int(KData::Atom(Cow::Borrowed(&34))),
+        KVal::Symbol(KData::Atom(Cow::Owned("vague".to_string()))),
+        KVal::Int(KData::Atom(Cow::Borrowed(&-3000))),
+    ])
     .to_k()
 }
 // make a compound list from an existing simple list
 #[no_mangle]
 pub extern "C" fn drift2(_: *const K) -> *const K {
-    let existing_list = KVal::Enum(KData::List(Cow::from(vec![0_i64, 1]))); // error messages returned by 'as_compound_list' are null terminated
+    let existing_list = KVal::Enum(KData::List(Cow::Borrowed(&[0_i64, 1])), Some("enum")); // error messages returned by 'as_compound_list' are null terminated
 
     // Convert a list of enum indices into a compound list while creating enum values from the indices which are tied with
     //  an existing enum variable named "enum", i.e., Enum indices [0, 1] in the code are cast into `(enum[0]; enum[1])`.
-    let existing_list = match existing_list.to_compound_list(Some("enum")) {
+    let existing_list = match existing_list.to_compound_list() {
         Ok(compound) => compound,
         Err(e_str) => return new_error(e_str),
     };
 
     // another compound list we want to add to the existing list
-    let binding = [
-        to_k!(KVal::Enum(KData::Atom(Cow::Borrowed(&2))), "enum2").cast_mut(), // `enum2[2]`.
-        KVal::Month(KData::Atom(Cow::Borrowed(&3))).to_k().cast_mut(),
-    ];
-    let other_list = KVal::CompoundList(Cow::Borrowed(&binding));
+    let other_list = KVal::CompoundList(vec![
+        KVal::Enum(KData::Atom(Cow::Borrowed(&2)), Some("enum2")), // `enum2[2]`.
+        KVal::Month(KData::Atom(Cow::Borrowed(&3))),
+    ]);
 
     // return the joined list
-    match existing_list.join(other_list) {
+    match KVal::join(existing_list, other_list) {
         Ok(joined) => joined.to_k(),
         Err(e_str) => new_error(e_str),
     }
@@ -481,7 +475,7 @@ extern "C" fn callback(socket: I) -> *const K {
     unsafe { libc::read(socket, buffer.as_mut_ptr() as *mut V, 8) };
     // Call `shout` function on q side with the received data.
     let result = unsafe { error_to_string(native::k(0, str_to_S!("shout"), buffer[0], KNULL)) };
-    if let KVal::Error(err) = KVal::from_raw(result) {
+    if let KVal::Error(err) = KVal::from_raw(result, None) {
         eprintln!("Execution error: {}", err.as_ref());
         unsafe { decrement_reference_count(result) };
     };
