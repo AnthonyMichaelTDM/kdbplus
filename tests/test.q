@@ -637,3 +637,4 @@ enum2: `mackerel`swordfish`tuna;
 
 // Show result.
 .test.DISPLAY_RESULT[]
+exit 0

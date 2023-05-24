@@ -7,7 +7,7 @@ use super::{KData, KDict, KVal};
 /// representation of a K table, which is itself a wrapper for a K dictionary where the keys are symbols and the values are lists
 #[derive(Debug, Clone)]
 pub struct KTable<'a> {
-    pub dict: Box<KDict<'a>>,
+    pub dict: KDict<'a>,
 }
 
 impl<'a> KTable<'a> {
@@ -18,7 +18,7 @@ impl<'a> KTable<'a> {
     /// TODO: add example
     pub(super) fn new_from_k(k: &'a K) -> Self {
         Self {
-            dict: Box::new(KDict::new_from_k(k)),
+            dict: KDict::new_from_k(unsafe { &**k.cast::<*mut K>() }),
         }
     }
 
@@ -48,7 +48,7 @@ impl<'a> KTable<'a> {
         // }, "invalid values, all columns must be the same length" );
 
         KTable {
-            dict: Box::new(kdict),
+            dict: kdict,
         }
     }
 

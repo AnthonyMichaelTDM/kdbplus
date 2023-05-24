@@ -384,9 +384,9 @@ enum: `a`b;
 // len - list
 .test.ASSERT_EQ["len list"; .api.numbers til 5; "5 people are in numbers"]
 // len - dictionary
-/ .test.ASSERT_EQ["len dictionary"; .api.numbers `a`b!("many"; `split`asunder); "2 people are in numbers"]
+.test.ASSERT_EQ["len dictionary"; .api.numbers `a`b!("many"; `split`asunder); "2 people are in numbers"]
 // len - table
-/ .test.ASSERT_EQ["len table"; .api.numbers ([] x: til 10); "10 people are in numbers"]
+.test.ASSERT_EQ["len table"; .api.numbers ([] x: til 10); "10 people are in numbers"]
 
 
 //%% KVal as Constructors %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
