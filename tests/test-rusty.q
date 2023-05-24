@@ -9,7 +9,7 @@
 //++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++++//
 
 // Fetch shared object from build directory.
-//system "cp ../target/debug/librusty_api_examples.so .";
+system "cp ../target/debug/librusty_api_examples.so .";
 
 // Load test helper functions.
 \l test_helper_function.q
@@ -83,7 +83,7 @@ LIBPATH_: `librusty_api_examples 2:
 / // ja
 / .api.create_simple_list: LIBPATH_ (`create_simple_list; 1);
 / // push_raw
-/ .api.create_simple_list2: LIBPATH_ (`create_simple_list2; 1);
+.api.create_simple_list2: LIBPATH_ (`create_simple_list2; 1);
 / // kp
 / .api.create_string: LIBPATH_ (`create_string; 1);
 / // kpn
@@ -153,7 +153,7 @@ LIBPATH_: `librusty_api_examples 2:
 // str_to_const_S
 .api.must_be_int: LIBPATH_ (`must_be_int; 1);
 / // len
-/ .api.numbers: LIBPATH_ (`numbers; 1);
+.api.numbers: LIBPATH_ (`numbers; 1);
 / // error_to_string
 / .api.no_panick: LIBPATH_ (`no_panick; 2);
 / // new_null
@@ -371,10 +371,23 @@ enum: `a`b;
 .test.ASSERT_EQ["push"; .api.create_compound_list2[5i]; (til 5), 5i]
 
 / // push_raw
-/ .test.ASSERT_EQ["push_raw"; .api.create_simple_list2[]; 2000.01.01+til 5]
+.test.ASSERT_EQ["push_raw"; .api.create_simple_list2[]; 2000.01.01+til 5]
 
 / // push_symbol
-/ .test.ASSERT_EQ["push_symbol"; .api.create_symbol_list2[]; `Abraham`Isaac`Jacob`Joseph]
+.test.ASSERT_EQ["push_symbol"; .api.create_symbol_list2[]; `Abraham`Isaac`Jacob`Joseph]
+
+
+// len - general null
+.test.ASSERT_EQ["len general null"; .api.numbers (::); "1 people are in numbers"]
+// len - atom
+.test.ASSERT_EQ["len atom"; .api.numbers first 1?0Ng; "1 people are in numbers"]
+// len - list
+.test.ASSERT_EQ["len list"; .api.numbers til 5; "5 people are in numbers"]
+// len - dictionary
+/ .test.ASSERT_EQ["len dictionary"; .api.numbers `a`b!("many"; `split`asunder); "2 people are in numbers"]
+// len - table
+/ .test.ASSERT_EQ["len table"; .api.numbers ([] x: til 10); "10 people are in numbers"]
+
 
 //%% KVal as Constructors %%//vvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvvv/
 

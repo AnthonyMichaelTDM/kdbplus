@@ -359,6 +359,11 @@ pub extern "C" fn create_compound_list2(int: *const K) -> *const K {
 }
 
 #[no_mangle]
+pub extern "C" fn create_simple_list2(_: *const K) -> *const K {
+    KVal::Date(KData::List(Cow::from((0..5).collect::<Vec<_>>()))).to_k()
+}
+
+#[no_mangle]
 pub extern "C" fn create_symbol_list2(_: *const K) -> *const K {
     KVal::Symbol(KData::List(Cow::Borrowed(&[
         "Abraham".to_string(),
@@ -394,8 +399,8 @@ pub extern "C" fn labeling(mut list: *const K) -> *const K {
 /// Example of `len`.
 #[no_mangle]
 pub extern "C" fn numbers(obj: *const K) -> *const K {
-    //TODO: add len functionality to KVal
-    todo!()
+    let count = format!("{} people are in numbers", KVal::from_raw(obj,None).len());
+    new_string(&count)
 }
 
 /// Example of `q_ipc_encode`.

@@ -85,6 +85,16 @@ impl<'a> KData<'a, String> {
     }
 }
 
+/// generic utility functions
+impl<'a, T:std::fmt::Debug + Clone> KData<'a, T> {
+    pub fn len(&self) -> i64 {
+        match self {
+            KData::Atom(_) => 1,
+            KData::List(l) => l.len().try_into().unwrap(),
+        }
+    }
+}
+
 /// intuitive rust wrappers for q types, allowing for idiomatic rust code
 /// that can take full advantage of rust's powerful pattern matching and type system
 /// when interacting with q.
@@ -632,5 +642,64 @@ impl<'a> KVal<'a> {
             KVal::Error(err) => re_exports::new_error(&err),
             KVal::Null => re_exports::new_null(),
         }
+    }
+
+    /// Get the length of q object. The meaning of the returned value varies according to the type:
+    /// - atom: 1
+    /// - list: The number of elements in the list.
+    /// - table: The number of rows.
+    /// - dictionary: The number of keys.
+    /// - general null: 1
+    /// # Example
+    /// ```no_run
+    /// use kdbplus::rusty_api::*;
+    /// use kdbplus::rusty_api::types::*;
+    ///
+    /// #[no_mangle]
+    /// pub extern "C" fn numbers(obj: *const K) -> *const K{
+    ///   let count=format!("{} people are in numbers", KVal::from_raw(obj).len());
+    ///   new_string(&count)
+    /// }
+    /// ```
+    /// ```q
+    /// q)census: `libapi_examples 2: (`numbers; 1);
+    /// q)census[(::)]
+    /// "1 people are in numbers"
+    /// q)census[til 4]
+    /// "4 people are in numbers"
+    /// q)census[`a`b!("many"; `split`asunder)]
+    /// "2 people are in numbers"
+    /// q)census[([] id: til 1000)]
+    /// "1000 people are in numbers"
+    /// ```
+    pub fn len(&self) -> i64 {
+        use KVal::*; // for brevity
+
+        match self {
+            CompoundList(list) => list.len().try_into().unwrap(),
+            Bool(data) => data.len(),
+            Guid(data) => data.len(),
+            Byte(data) => data.len(),
+            Short(data) => data.len(),
+            Int(data) => data.len(),
+            Long(data) => data.len(),
+            Real(data) => data.len(),
+            Float(data) => data.len(),
+            Char(_) => 1,
+            Symbol(data) => data.len(),
+            Timestamp(data) => data.len(),
+            Month(data) => data.len(),
+            Date(data) => data.len(),
+            Datetime(data) => data.len(),
+            Timespan(data) => data.len(),
+            Minute(data) => data.len(),
+            Second(data) => data.len(),
+            Time(data) => data.len(),
+            Enum(data,_) => data.len(),
+            String(_) => 1,
+            Error(_) => 1,
+            Null => 1,
+        }
+
     }
 }
