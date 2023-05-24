@@ -328,10 +328,18 @@ pub extern "C" fn hidden_key(table: *const K) -> *const K {
     todo!()
 }
 
-// TODO: fn pick_row(), pre-requisites: support tables
+// Example of get_row
 #[no_mangle]
 pub extern "C" fn pick_row(obj: *const K, index: *const K) -> *const K {
-    todo!();
+    match (KVal::from_raw(obj, None), KVal::from_raw(index, None)) {
+        (KVal::Table(table), KVal::Long(KData::Atom(i))) => {
+            match table.get_row(*i, &[Some("sym")]) {
+                Ok(row) => row.to_k(),
+                Err(err) => new_error(err),
+            }
+        }
+        _ => new_error("not a table\0"),
+    }
 }
 
 /// example of KVal::join()
