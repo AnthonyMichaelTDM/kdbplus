@@ -5,57 +5,67 @@ use super::KVal;
 /// representation of a K dictionary, which is itself a slice of 2 K lists of equal length
 /// where the first list contains the keys and the second list contains the values
 #[derive(Debug, Clone)]
+#[non_exhaustive] // prevent construction outside of this module
 pub struct KDict<'a> {
     pub keys: Box<KVal<'a>>,
     pub values: Box<KVal<'a>>,
-    _private: (), // prevent construction outside of this module
 }
 
 impl<'a> KDict<'a> {
-    /// constructor for a KDict from a K object
+    /// constructor for a KDict from a K object,
     ///
-    /// # Example
+    /// K object must be a valid dictionary,
+    /// if it isn't it could cause undefined behavior in release mode or panic otherwise
     ///
-    /// TODO: add example
+    /// only called by the KVal::from method,
+    /// which should guarentee that the passed K object is a valid dictionary,
+    /// therefore checks are only performed when debug_assertions
+    ///
+    ///
+    /// Errors if the K object is not a valid dictionary
     pub(super) fn new_from_k(k: &'a K) -> KDict<'a> {
-        assert!(
+        debug_assert!(
+            // okay to panic because this isn't public api and it's conditions should be met
+            // by the constructor
             k.qtype == crate::qtype::DICTIONARY || k.qtype == crate::qtype::SORTED_DICTIONARY,
             "invalid k object, must be a dictionary"
         );
         let slice = k.as_slice::<*mut K>().unwrap();
-        assert!(
+        debug_assert!(
+            // this should never happen
             slice.len() == 2,
             "invalid dictionary, must be a list of two items"
         );
         Self {
             keys: Box::new(KVal::from_raw(slice[0].cast_const(), None)),
             values: Box::new(KVal::from_raw(slice[1].cast_const(), None)),
-            _private: (),
         }
     }
 
     /// constructor for a KDict,
     /// keys must be a list,
-    /// values must be a list of equal length to keys
-    /// panics if these conditions are not met
+    /// values must be a list,
+    /// keys and values must be of equal length
+    ///
+    /// errors if these conditions are not met
     ///
     /// # Example
     ///
     /// TODO: add example
-    pub fn new(keys: KVal<'a>, values: KVal<'a>) -> KDict<'a> {
-        assert!(keys.is_list(), "invalid keys, must be a list");
-        assert!(values.is_list(), "invalid values, must be a list");
-        assert_eq!(
-            keys.len(),
-            values.len(),
-            "invalid dictionary, keys and values must be of equal length"
-        );
-
-        KDict {
+    pub fn new(keys: KVal<'a>, values: KVal<'a>) -> Result<KDict<'a>, &'static str> {
+        if !keys.is_list() {
+            return Err("invalid keys, must be a list\0");
+        }
+        if !values.is_list() {
+            return Err("invalid values, must be a list\0");
+        }
+        if keys.len() != values.len() {
+            return Err("invalid dictionary, keys and values must be of equal length\0");
+        }
+        Ok(KDict {
             keys: Box::new(keys),
             values: Box::new(values),
-            _private: (),
-        }
+        })
     }
 
     /// get the Keys list of the dictionary
@@ -83,5 +93,9 @@ impl<'a> KDict<'a> {
     /// TODO: add example
     pub fn len(&self) -> i64 {
         self.keys.len()
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 }

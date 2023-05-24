@@ -86,4 +86,11 @@ impl<'a, T: std::fmt::Debug + Clone> KData<'a, T> {
             KData::List(l) => l.len().try_into().unwrap(),
         }
     }
+
+    pub fn is_empty(&self) -> bool {
+        match self {
+            KData::Atom(_) => false,
+            KData::List(l) => l.is_empty(),
+        }
+    }
 }

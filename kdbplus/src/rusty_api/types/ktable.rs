@@ -6,6 +6,7 @@ use super::{KData, KDict, KVal};
 
 /// representation of a K table, which is itself a wrapper for a K dictionary where the keys are symbols and the values are lists
 #[derive(Debug, Clone)]
+#[non_exhaustive]
 pub struct KTable<'a> {
     pub dict: KDict<'a>,
 }
@@ -13,43 +14,79 @@ pub struct KTable<'a> {
 impl<'a> KTable<'a> {
     /// constructor for KTable from a K object
     ///
+    /// given K object must be a valid table (wrapper around a dictionary with symbols as keys and lists as values)
+    ///
+    /// when not in release mode, panics if the given K object is not of type
+    /// [`TABLE`](crate::qtype::TABLE)
+    ///
     /// # Example
     ///
     /// TODO: add example
     pub(super) fn new_from_k(k: &'a K) -> Self {
-        Self {
+        debug_assert!(k.qtype == crate::qtype::TABLE, "invalid qtype for KTable");
+
+        let mut table = Self {
             dict: KDict::new_from_k(unsafe { &**k.cast::<*mut K>() }),
+        };
+
+        // because single column tables in q won't be wrapped in a compound list, we explicity check
+        // that case and wrap it in a compound list if needed
+        // we don't have to check that values is a list because in order to be a valid q TABLE, k
+        // must wrap a dictionary whose values is a list.
+        if let KVal::CompoundList(_) = table.dict.get_values() {
+        } else {
+            table.dict = KDict::new(
+                table.dict.get_keys().to_owned(),
+                KVal::CompoundList(vec![table.dict.get_values().to_owned()]),
+            )
+            .unwrap();
         }
+
+        table
     }
 
     /// constructor for KTable
-    /// kval must be a dictionary with symbols as keys and lists as values, all the values must be the same length
     ///
+    /// * kdict.keys: the names of each column
+    /// * kdict.values: the columns of the table
+    ///
+    /// # Note
+    /// * kdict's keys must be a symbol list and kdict's values must be a compound list.
+    /// * the elements of kdict.values (columns of the table) must themselves be lists, all of equal length
+    ///
+    /// will error if these conditions are not met,
+    /// but the second condition is not checked in release mode for performance reasons, if it is
+    /// not met then other methods will error
     /// this constructor does not fully check these conditions for performance reasons, but other methods will panic or error if they aren't met
     ///
     /// the only condition this is not checked is that all the values are the same length, this is for performance reasons because the other checks are O(1) and this would be O(columns)
     ///
-    pub fn new(kdict: KDict<'a>) -> KTable<'a> {
-        // check that keys is a symbol list
-        assert!(
-            matches!(*kdict.keys, KVal::Symbol(KData::List(_))),
-            "invalid keys, must be a symbol list"
-        );
-        // check that values is a compound list
-        assert!(
-            matches!(*kdict.values, KVal::CompoundList(_)),
-            "invalid values, must be a compound list"
-        );
-        // check that all elements of values are the same length, ommitted for performance reasons
-        // assert!( {
-        //     let KVal::CompoundList(columns) = *kdict.values else {unimplemented!()};
-        //     let len = columns[0].len();
-        //     columns.iter().all(|x| x.len() == len)
-        // }, "invalid values, all columns must be the same length" );
-
-        KTable {
-            dict: kdict,
+    pub fn new(kdict: KDict<'a>) -> Result<KTable<'a>, &'static str> {
+        if let KVal::Symbol(KData::List(_)) = kdict.get_keys() {
+        } else {
+            return Err("keys must be a symbol list\0");
         }
+
+        if let KVal::CompoundList(_) = kdict.get_values() {
+        } else {
+            return Err("columns must be in a compound list\0");
+        }
+
+        // check that all elements of values are the same length, ommitted for performance reasons
+        // in optomized builds (debug_assertions is false)
+        #[cfg(debug_assertions)]
+        match kdict.get_values() {
+            KVal::CompoundList(columns) => {
+                let len = columns[0].len();
+                if !columns.iter().all(|x| x.len() == len && x.is_list()) {
+                    return Err("invalid table, all columns must be lists with the same length\0");
+                }
+            }
+            _ => unreachable!(), // we previously check if values is a compound list, so this is
+                                 // okay
+        }
+
+        Ok(KTable { dict: kdict })
     }
 
     /// get a column of the table by index
@@ -57,7 +94,7 @@ impl<'a> KTable<'a> {
     /// # Note
     /// * given index must be in range of the table
     /// * for enumerated columns, the given enum_sources will take precidence over any existing enum_sources,
-    ///   * will panic if, for a enumerated column, neither enum_sources nor existing sources are provided
+    ///   * will return an error if, for a enumerated column, neither enum_sources nor existing sources are provided
     ///
     /// # Example
     /// TODO: validate / add example
@@ -71,12 +108,12 @@ impl<'a> KTable<'a> {
     ///     match (KVal::from_raw(object, None), KVal::from_raw(index, None)) {
     ///         (KVal::Table(table), KVal::Long(KData::Atom(i))) => {
     ///             match table.get_column(*i, Some("sym")) {
-    ///                 Some(column) => {
+    ///                 Ok(column) => {
     ///                     let null = unsafe{native::k(0, str_to_S!("{-1 \"column: \", .Q.s1 x}"), column.to_k(), KNULL)};
     ///                     unsafe{decrement_reference_count(null)};
     ///                     KNULL
     ///                 }
-    ///                 None => new_error("invalid column index\0")
+    ///                 Err(err) => new_error(err)
     ///             }
     ///        }
     ///       _ => new_error("type error\0")
@@ -91,27 +128,43 @@ impl<'a> KTable<'a> {
     /// q)col[table;3]
     /// column: "oxx"
     /// ```
-    pub fn get_column(&'a self, index: i64, enum_source: Option<&'a str>) -> Option<KVal<'a>> {
-        let KVal::CompoundList(columns) = self.dict.values.as_ref() else {unimplemented!()};
+    pub fn get_column(
+        &'a self,
+        index: i64,
+        enum_source: Option<&'a str>,
+    ) -> Result<KVal<'a>, &'static str> {
+        let column = match self.dict.values.as_ref() {
+            KVal::CompoundList(columns) => columns
+                .get(index as usize)
+                .ok_or("invalid column index\0")?,
+            _ => return Err("values must be a compound list\0"), // TODO: this may be unreachable
+                                                                 // because of the check in the constructor
+        };
 
-        let column = columns.get(index as usize)?;
-
-        assert!(column.is_list(), "columns must be lists, if you get this error from a K object from q, open an issue on github");
+        // ensure that the column is a list
+        // TODO: this may be unreachable because of the check in the constructor
+        if !column.is_list() {
+            return Err("columns must be lists\0");
+        }
 
         match column {
-            KVal::Enum(KData::List(enums), src) => Some(KVal::Enum(
-                KData::List(enums.to_owned()),
-                enum_source.or_else(|| {
-                    src.or_else(|| {
-                        unimplemented!("enum_source must be provided for enumerated columns")
-                    })
-                }),
-            )),
-            col => Some(col.to_owned()),
+            KVal::Enum(KData::List(enums), src) => {
+                let source = enum_source
+                    .or(*src)
+                    .ok_or("enum_source must be provided for enumerated columns\0")?;
+                Ok(KVal::Enum(
+                    KData::List(Cow::Owned(enums.clone().into_owned())),
+                    Some(source),
+                ))
+            }
+            col => Ok(col.to_owned()),
         }
     }
 
     /// get the number of rows in the table (length of the table)
+    ///
+    /// panics if columns are not stored in a compound list, which should never happen because the
+    /// constructor enforces that columns are stored in a compound list
     ///
     /// # Example
     /// ```no_run
@@ -136,11 +189,15 @@ impl<'a> KTable<'a> {
     /// length: 3
     /// ```
     pub fn len(&self) -> i64 {
-        if let KVal::CompoundList(columns) = self.dict.values.as_ref() {
-            columns[0].len()
-        } else {
-            unimplemented!()
+        match self.dict.values.as_ref() {
+            KVal::CompoundList(columns) if !columns.is_empty() => columns[0].len(),
+            KVal::CompoundList(_) => 0_i64,
+            _ => unreachable!("values must be a compound list\0"),
         }
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.len() == 0
     }
 
     /// Get a table row of the given index, as a CompoundList. For enumerated column, a names of a target `sym` list
@@ -164,12 +221,12 @@ impl<'a> KTable<'a> {
     ///     match (KVal::from_raw(object, None), KVal::from_raw(index, None)) {
     ///         (KVal::Table(table), KVal::Long(KData::Atom(i))) => {
     ///             match table.get_row(*i,&[Some("sym")]) {
-    ///                 Some(row) => {
+    ///                 Ok(row) => {
     ///                     let null = unsafe{native::k(0, str_to_S!("{-1 \"row: \", .Q.s1 x}"), row.to_k(), KNULL)};
     ///                     unsafe{decrement_reference_count(null)};
     ///                     KNULL
     ///                 },
-    ///                 None => new_error("invalid row index\0")
+    ///                 Err(err) => new_error(err)
     ///             }
     ///         },
     ///         _ => new_error("type error\0")
@@ -184,37 +241,127 @@ impl<'a> KTable<'a> {
     /// q)row[table;1]
     /// row: `time`sym`go`miscellaneous!(2022.01.30D07:55:47.987133353;`Green;"x";`lion)
     /// ```
-    pub fn get_row(&'a self, index: i64, enum_sources: &[Option<&'a str>]) -> Option<KVal<'a>> {
-        // check that index is in bounds
-        if self.dict.len() > 0 && index >= self.get_column(0, enum_sources[0])?.len() {
-            return None;
+    pub fn get_row(
+        &'a self,
+        index: i64,
+        enum_sources: &[Option<&'a str>],
+    ) -> Result<KVal<'a>, &'static str> {
+        if !self.dict.is_empty() && index >= self.get_column(0, enum_sources[0])?.len() {
+            return Err("index out of bounds\0");
         }
 
-        let mut row = Vec::with_capacity(self.dict.keys.len().try_into().unwrap());
+        // macro to get the value of a column in row `index`
+        macro_rules! atom_from_column_at_row {
+            ($list:ident, $variant:path) => {
+                $variant(KData::Atom(Cow::Owned(
+                    $list
+                        .get(index as usize)
+                        .ok_or("index out of bounds, columns were not the same length\0")?
+                        .to_owned(),
+                )))
+            };
+            ($list:ident, $variant:path, $enum_src:expr) => {
+                $variant(
+                    KData::Atom(Cow::Owned(
+                        $list
+                            .get(index as usize)
+                            .ok_or("index out of bounds, columns were not the same length\0")?
+                            .to_owned(),
+                    )),
+                    $enum_src,
+                )
+            };
+        }
 
         let values = self.dict.values.to_owned();
 
         match *values {
-            KVal::CompoundList(cols) => {
-                for (i, col) in cols.iter().enumerate() {
-                    let enum_source = enum_sources[i];
-                    row.push(match col {
-                        KVal::Enum(KData::List(enums), src) => KVal::Enum(
-                            KData::Atom(Cow::Owned(enums[i])),
-                            enum_source.or_else(|| {
-                                src.or_else(|| {
-                                    unimplemented!(
-                                        "enum_source must be provided for enumerated columns"
-                                    )
-                                })
-                            }),
+            KVal::CompoundList(columns) => {
+                let mut row: Vec<KVal> =
+                    Vec::with_capacity(self.dict.keys.len().try_into().unwrap());
+                let mut enum_index = 0;
+
+                for column in columns.iter() {
+                    let value_of_column_at_row: KVal = match column {
+                        KVal::Enum(KData::List(enumerated_column), src) => {
+                            let enum_source = enum_sources
+                                .get(enum_index)
+                                .unwrap_or(src)
+                                .ok_or("enum source must be provided for enumerated columns\0")?;
+                            enum_index += 1;
+                            atom_from_column_at_row!(
+                                enumerated_column,
+                                KVal::Enum,
+                                Some(enum_source)
+                            )
+                        }
+                        KVal::CompoundList(column) => column
+                            .get(index as usize)
+                            .ok_or("index out of bounds, columns were not the same length\0")?
+                            .to_owned(),
+                        KVal::Bool(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Bool)
+                        }
+                        KVal::Guid(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Guid)
+                        }
+                        KVal::Byte(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Byte)
+                        }
+                        KVal::Short(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Short)
+                        }
+                        KVal::Int(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Int)
+                        }
+                        KVal::Long(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Long)
+                        }
+                        KVal::Real(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Real)
+                        }
+                        KVal::Float(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Float)
+                        }
+                        KVal::String(str) => KVal::Char(
+                            str.chars()
+                                .nth(index as usize)
+                                .ok_or("index out of bounds, columns were not the same length\0")?,
                         ),
-                        colum => colum.to_owned(),
-                    })
+                        KVal::Symbol(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Symbol)
+                        }
+                        KVal::Timestamp(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Timestamp)
+                        }
+                        KVal::Month(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Month)
+                        }
+                        KVal::Date(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Date)
+                        }
+                        KVal::Datetime(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Datetime)
+                        }
+                        KVal::Timespan(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Timespan)
+                        }
+                        KVal::Minute(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Minute)
+                        }
+                        KVal::Second(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Second)
+                        }
+                        KVal::Time(KData::List(column)) => {
+                            atom_from_column_at_row!(column, KVal::Time)
+                        }
+                        _ => Err("columns must each be lists, within a compound list\0")?,
+                    };
+                    row.push(value_of_column_at_row)
                 }
-                Some(KVal::CompoundList(row.to_owned()))
+                Ok(KVal::CompoundList(row.to_owned()))
             }
-            _ => None,
+            _ => Err("values must be a compound list\0"),
         }
     }
 }
