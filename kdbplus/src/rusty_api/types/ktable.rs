@@ -1,3 +1,4 @@
+use rayon::prelude::*;
 use std::borrow::Cow;
 
 use crate::rusty_api::K;
@@ -22,6 +23,7 @@ impl<'a> KTable<'a> {
     /// # Example
     ///
     /// TODO: add example
+    #[inline]
     pub(super) fn new_from_k(k: &'a K) -> Self {
         debug_assert!(k.qtype == crate::qtype::TABLE, "invalid qtype for KTable");
 
@@ -60,7 +62,7 @@ impl<'a> KTable<'a> {
     /// this constructor does not fully check these conditions for performance reasons, but other methods will panic or error if they aren't met
     ///
     /// the only condition this is not checked is that all the values are the same length, this is for performance reasons because the other checks are O(1) and this would be O(columns)
-    ///
+    #[inline]
     pub fn new(kdict: KDict<'a>) -> Result<KTable<'a>, &'static str> {
         if let KVal::Symbol(KData::List(_)) = kdict.get_keys() {
         } else {
@@ -78,7 +80,7 @@ impl<'a> KTable<'a> {
         match kdict.get_values() {
             KVal::CompoundList(columns) => {
                 let len = columns[0].len();
-                if !columns.iter().all(|x| x.len() == len && x.is_list()) {
+                if !columns.par_iter().all(|x| x.len() == len && x.is_list()) {
                     return Err("invalid table, all columns must be lists with the same length\0");
                 }
             }
@@ -128,6 +130,7 @@ impl<'a> KTable<'a> {
     /// q)col[table;3]
     /// column: "oxx"
     /// ```
+    #[inline]
     pub fn get_column(
         &'a self,
         index: i64,
@@ -188,6 +191,7 @@ impl<'a> KTable<'a> {
     /// q)col[table]
     /// length: 3
     /// ```
+    #[inline]
     pub fn len(&self) -> i64 {
         match self.dict.values.as_ref() {
             KVal::CompoundList(columns) if !columns.is_empty() => columns[0].len(),
@@ -196,6 +200,7 @@ impl<'a> KTable<'a> {
         }
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -247,7 +252,10 @@ impl<'a> KTable<'a> {
         index: i64,
         enum_sources: &[Option<&'a str>],
     ) -> Result<KVal<'a>, &'static str> {
-        if !self.dict.is_empty() && index >= self.get_column(0, enum_sources[0])?.len() {
+        if !self.dict.is_empty()
+            && !enum_sources.is_empty()
+            && index >= self.get_column(0, enum_sources[0])?.len()
+        {
             return Err("index out of bounds\0");
         }
 
@@ -282,6 +290,8 @@ impl<'a> KTable<'a> {
                     Vec::with_capacity(self.dict.keys.len().try_into().unwrap());
                 let mut enum_index = 0;
 
+                // could probably try to parallelize this, but it's not a bottleneck, and dealing
+                // with atomics might cause more overhead than it's worth
                 for column in columns.iter() {
                     let value_of_column_at_row: KVal = match column {
                         KVal::Enum(KData::List(enumerated_column), src) => {

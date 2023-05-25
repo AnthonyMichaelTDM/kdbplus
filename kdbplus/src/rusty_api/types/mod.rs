@@ -1,5 +1,6 @@
 use super::{re_exports, K, S};
 use crate::qtype;
+use rayon::prelude::*;
 use std::{borrow::Cow, ffi::CString};
 
 mod kdata;
@@ -290,7 +291,7 @@ impl<'a> KVal<'a> {
             ($simple_list:ident,$constructor:expr) => {{
                 Ok(KVal::CompoundList(
                     $simple_list
-                        .iter()
+                        .par_iter()
                         .map(|a| $constructor(Atom(Cow::Owned(a.to_owned()))))
                         .collect::<Vec<_>>(),
                 ))
@@ -299,7 +300,7 @@ impl<'a> KVal<'a> {
             ($simple_list:ident,$constructor:expr,$enum_source:expr) => {{
                 Ok(KVal::CompoundList(
                     $simple_list
-                        .iter()
+                        .par_iter()
                         .map(|a| $constructor(Atom(Cow::Owned(a.to_owned())), $enum_source))
                         .collect::<Vec<_>>(),
                 ))
@@ -369,13 +370,13 @@ impl<'a> KVal<'a> {
         macro_rules! join {
             // for typical lists
             ($variant:path, $base:ident, $other:ident) => {
-                $base.to_mut().extend($other.iter())
+                $base.to_mut().par_extend($other.par_iter())
             };
         }
         // append other to base, and return it or error
         match (self, other) {
             (CompoundList(base_list), CompoundList(other_list)) => {
-                base_list.extend(other_list);
+                base_list.par_extend(other_list);
             }
             (Bool(List(bl)), Bool(List(ol))) => join!(Bool, bl, ol),
             (Guid(List(bl)), Guid(List(ol))) => join!(Guid, bl, ol),

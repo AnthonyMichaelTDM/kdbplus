@@ -80,6 +80,7 @@ impl<'a> KData<'a, String> {
 
 /// generic utility functions
 impl<'a, T: std::fmt::Debug + Clone> KData<'a, T> {
+    #[inline]
     pub fn len(&self) -> i64 {
         match self {
             KData::Atom(_) => 1,
@@ -87,6 +88,7 @@ impl<'a, T: std::fmt::Debug + Clone> KData<'a, T> {
         }
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         match self {
             KData::Atom(_) => false,

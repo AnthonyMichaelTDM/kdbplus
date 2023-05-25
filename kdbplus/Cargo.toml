@@ -28,6 +28,7 @@ async-trait = { version = "0.1", optional = true }
 async-recursion = "1"
 libc = { version = "0.2", optional = true }
 sha1_smol = { version = "1", optional = true }
+rayon = { version = "1", optional = true }
 
 [[test]]
 name = "test"
@@ -39,7 +40,7 @@ required-features = ["ipc"]
 default = []
 # Select one of two features
 api = ["libc"]
-rusty-api = ["libc"]
+rusty-api = ["libc", "rayon"]
 ipc = [
   "once_cell",
   "chrono",

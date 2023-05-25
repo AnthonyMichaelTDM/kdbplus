@@ -23,6 +23,7 @@ impl<'a> KDict<'a> {
     ///
     ///
     /// Errors if the K object is not a valid dictionary
+    #[inline]
     pub(super) fn new_from_k(k: &'a K) -> KDict<'a> {
         debug_assert!(
             // okay to panic because this isn't public api and it's conditions should be met
@@ -52,6 +53,7 @@ impl<'a> KDict<'a> {
     /// # Example
     ///
     /// TODO: add example
+    #[inline]
     pub fn new(keys: KVal<'a>, values: KVal<'a>) -> Result<KDict<'a>, &'static str> {
         if !keys.is_list() {
             return Err("invalid keys, must be a list\0");
@@ -73,6 +75,7 @@ impl<'a> KDict<'a> {
     /// # Example
     ///
     /// TODO: add example
+    #[inline]
     pub fn get_keys(&self) -> &KVal<'a> {
         &self.keys
     }
@@ -82,6 +85,7 @@ impl<'a> KDict<'a> {
     /// # Example
     ///
     /// TODO: add example
+    #[inline]
     pub fn get_values(&self) -> &KVal<'a> {
         &self.values
     }
@@ -91,10 +95,12 @@ impl<'a> KDict<'a> {
     /// # Example
     ///
     /// TODO: add example
+    #[inline]
     pub fn len(&self) -> i64 {
         self.keys.len()
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
