@@ -547,7 +547,7 @@ extern "C" {
     /// use kdbplus::rusty_api::native::*;
     ///
     /// #[no_mangle]
-    /// pub extern "C" fn concat_list(mut list1: *const K, list2: K) -> *const K{
+    /// pub extern "C" fn concat_list(mut list1: *const K, list2: *const K) -> *const K{
     ///   unsafe{
     ///     jv(&mut list1, list2);
     ///     r1(list1)

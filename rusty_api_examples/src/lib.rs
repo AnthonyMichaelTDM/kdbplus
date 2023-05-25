@@ -347,12 +347,13 @@ pub extern "C" fn pick_row(obj: *const K, index: *const K) -> *const K {
 /// example of KVal::join()
 #[no_mangle]
 pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
-    let list1 = KVal::from_raw(list1, None);
+    let mut list1 = KVal::from_raw(list1, None);
     let list2 = KVal::from_raw(list2, None);
 
-    match KVal::join(list1, list2) {
-        Ok(list3) => list3.to_k(),
-        Err(e) => new_error(e),
+    if let Err(e) = list1.join(list2) {
+        new_error(e)
+    } else {
+        list1.to_k()
     }
 }
 
@@ -360,11 +361,12 @@ pub extern "C" fn concat_list2(list1: *const K, list2: *const K) -> *const K {
 pub extern "C" fn create_compound_list2(int: *const K) -> *const K {
     // we don't actually need to check if int is an int, because
     // compound lists can contain any type of K object
-    let base_list: KVal = KVal::Long(KData::List(Cow::from((0..5).collect::<Vec<i64>>())))
+    let mut base_list: KVal = KVal::Long(KData::List(Cow::from((0..5).collect::<Vec<i64>>())))
         .to_compound_list()
         .unwrap();
     let other_list: KVal = KVal::CompoundList(vec![KVal::from_raw(int, None)]);
-    KVal::join(base_list, other_list).unwrap().to_k()
+    base_list.join(other_list).unwrap();
+    base_list.to_k()
 }
 
 #[no_mangle]
@@ -395,15 +397,22 @@ pub extern "C" fn print(k: *const K) -> *const K {
 /// Example of `get_attribute`.
 #[no_mangle]
 pub extern "C" fn murmur(list: *const K) -> *const K {
-    // TODO: add this functionality to KVal
-    todo!();
+    match unsafe { *list }.attribute {
+        qattribute::SORTED => new_string("Clean"),
+        qattribute::UNIQUE => new_symbol("Alone"),
+        _ => KNULL,
+    }
 }
 
 /// Example of `set_attribute`.
 #[no_mangle]
-pub extern "C" fn labeling(mut list: *const K) -> *const K {
-    // TODO: add this functionality to KVal
-    todo!();
+pub extern "C" fn labeling(list: *mut K) -> *const K {
+    if unsafe { *list }.is_list() && unsafe { *list }.qtype != qtype::COMPOUND_LIST {
+        unsafe { (*list).attribute = qattribute::SORTED };
+        unsafe { increment_reference_count(list) }
+    } else {
+        new_error("not a simple list\0")
+    }
 }
 
 /// Example of `len`.
@@ -465,7 +474,7 @@ pub extern "C" fn drift2(_: *const K) -> *const K {
 
     // Convert a list of enum indices into a compound list while creating enum values from the indices which are tied with
     //  an existing enum variable named "enum", i.e., Enum indices [0, 1] in the code are cast into `(enum[0]; enum[1])`.
-    let existing_list = match existing_list.to_compound_list() {
+    let mut existing_list = match existing_list.to_compound_list() {
         Ok(compound) => compound,
         Err(e_str) => return new_error(e_str),
     };
@@ -477,9 +486,10 @@ pub extern "C" fn drift2(_: *const K) -> *const K {
     ]);
 
     // return the joined list
-    match KVal::join(existing_list, other_list) {
-        Ok(joined) => joined.to_k(),
-        Err(e_str) => new_error(e_str),
+    if let Err(e) = existing_list.join(other_list) {
+        new_error(e)
+    } else {
+        existing_list.to_k()
     }
 }
 

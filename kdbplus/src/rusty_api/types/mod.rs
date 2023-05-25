@@ -341,51 +341,41 @@ impl<'a> KVal<'a> {
     ///
     /// acheives same functionality as [`push`](crate::api::KUtility) and [`append`](crate::api::KUtility)
     ///
-    /// causes allocations (see [`append`](std::vec::Vec)), clones list wrapped by base and other.
-    /// TODO: if possible, avoid these uncessary allocations by consuming other and modifying self.
-    ///
     /// * in cases of errror, the error string will be null-terminated
-    /// * order will always be [base[..], other[..]]
+    /// * order will always be [self[..], other[..]]
+    ///
+    /// # Side Effects
+    /// * self will be modified
     ///
     /// # Errors
-    /// * if base and other are not the same type (ie Int or Long)
-    /// * if base is a simple list and other is a compound list
-    /// * if base or other are: Err, Null, Char, String, Table, Dictionary, Foreign, or SortedDictionary variant
+    /// * if self and other are not the same type (ie Int or Long)
+    /// * if self is a simple list and other is a compound list
+    /// * if self or other are: Err, Null, Char, String, Table, Dictionary, Foreign, or SortedDictionary variant
     ///
     /// # Note
     /// behavior depends on variant of base and other
-    /// * if base is a simple list, other must be a simple list of the same type
-    /// * if base is a compound list, other must be a compound list (to combine a compound list with a simple list, use as_compound_list first)
-    /// * if base and other are enum lists, the source of base takes priority if set.
+    /// * if self is a simple list, other must be a simple list of the same type
+    /// * if self is a compound list, other must be a compound list (to combine a compound list with a simple list, use as_compound_list first)
+    /// * if self and other are enum lists, the source of base takes priority if set.
     ///
     /// # Examples
     /// TODO: add some
     #[inline] // because there are large pattern matches, this is a good candidate for inlining to enable more robust compiler optimizations
-    pub fn join(base: Self, other: Self) -> Result<Self, &'static str> {
+    pub fn join(&mut self, other: Self) -> Result<(), &'static str> {
         use KData::*; // for brevity
         use KVal::*; // for brevity
 
         // private macro to reduce code repition when joining 2 simple KVals (that may be atoms or lists)
         macro_rules! join {
             // for typical lists
-            ($variant:path, $base:ident, $other:ident) => {{
-                let mut base = $base.into_owned();
-                base.append(&mut $other.into_owned());
-                Ok($variant(List(Cow::Owned(base))))
-            }};
-            // for enum lists
-            ($variant:path, $base:ident, $other:ident, $enum_source:expr) => {{
-                let mut base = $base.into_owned();
-                base.append(&mut $other.into_owned());
-                Ok($variant(List(Cow::Owned(base)), $enum_source))
-            }};
+            ($variant:path, $base:ident, $other:ident) => {
+                $base.to_mut().extend($other.iter())
+            };
         }
         // append other to base, and return it or error
-        match (base, other) {
+        match (self, other) {
             (CompoundList(base_list), CompoundList(other_list)) => {
-                let mut base = base_list.to_owned();
-                base.append(&mut other_list.to_owned());
-                Ok(CompoundList(base))
+                base_list.extend(other_list);
             }
             (Bool(List(bl)), Bool(List(ol))) => join!(Bool, bl, ol),
             (Guid(List(bl)), Guid(List(ol))) => join!(Guid, bl, ol),
@@ -395,7 +385,7 @@ impl<'a> KVal<'a> {
             (Long(List(bl)), Long(List(ol))) => join!(Long, bl, ol),
             (Real(List(bl)), Real(List(ol))) => join!(Real, bl, ol),
             (Float(List(bl)), Float(List(ol))) => join!(Float, bl, ol),
-            (Symbol(List(bl)), Symbol(List(ol))) => join!(Symbol, bl, ol),
+            (Symbol(List(bl)), Symbol(List(ol))) => bl.to_mut().extend(ol.into_owned()),
             (Timestamp(List(bl)), Timestamp(List(ol))) => {
                 join!(Timestamp, bl, ol)
             }
@@ -410,11 +400,13 @@ impl<'a> KVal<'a> {
             (Minute(List(bl)), Minute(List(ol))) => join!(Minute, bl, ol),
             (Second(List(bl)), Second(List(ol))) => join!(Second, bl, ol),
             (Time(List(bl)), Time(List(ol))) => join!(Time, bl, ol),
-            (Enum(List(bl), bs), Enum(List(ol), os)) => {
-                join!(Enum, bl, ol, bs.or(os))
+            (Enum(List(bl), _), Enum(List(ol), _)) => {
+                join!(Enum, bl, ol)
             }
-            _ => Result::Err("not a list or types do not match\0"),
+            _ => return Result::Err("not a list or types do not match\0"),
         }
+
+        Ok(())
     }
 
     /// Create a list variant from an atom
@@ -632,6 +624,7 @@ impl<'a> KVal<'a> {
     /// q)census[([] id: til 1000)]
     /// "1000 people are in numbers"
     /// ```
+    #[inline]
     pub fn len(&self) -> i64 {
         use KVal::*; // for brevity
 
@@ -664,6 +657,7 @@ impl<'a> KVal<'a> {
         }
     }
 
+    #[inline]
     pub fn is_empty(&self) -> bool {
         self.len() == 0
     }
@@ -672,6 +666,7 @@ impl<'a> KVal<'a> {
     ///
     /// TODO: example
     ///
+    #[inline]
     pub fn is_list(&self) -> bool {
         use KData::*;
         use KVal::*; // for brevity // for brevity
@@ -704,6 +699,7 @@ impl<'a> KVal<'a> {
     ///
     /// TODO: example
     ///
+    #[inline]
     pub fn is_atom(&self) -> bool {
         use KData::*;
         use KVal::*; // for brevity // for brevity

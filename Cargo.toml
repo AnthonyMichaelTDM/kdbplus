@@ -1,2 +1,5 @@
 [workspace]
 members = ["kdbplus", "api_examples", "ipc_examples", "rusty_api_examples"]
+
+[profile.release]
+lto = "thin"

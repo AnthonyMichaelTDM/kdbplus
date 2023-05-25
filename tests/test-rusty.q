@@ -142,14 +142,14 @@ LIBPATH_: `librusty_api_examples 2:
 / .api.keyed_to_simple_table: LIBPATH_ (`keyed_to_simple_table; 1);
 / // unkey
 / .api.keyed_to_simple_table2: LIBPATH_ (`keyed_to_simple_table2; 1);
-/ // set_attribute
-/ .api.labeling: LIBPATH_ (`labeling; 1);
+// set_attribute
+.api.labeling: LIBPATH_ (`labeling; 1);
 // qnull_base::J
 .api.long_borders: LIBPATH_ (`long_borders; 1);
 // as_mut_slice
 .api.modify_long_list_a_bit: LIBPATH_ (`modify_long_list_a_bit; 1);
-/ // get_attribute
-/ .api.murmur: LIBPATH_ (`murmur; 1);
+// get_attribute
+.api.murmur: LIBPATH_ (`murmur; 1);
 // str_to_const_S
 .api.must_be_int: LIBPATH_ (`must_be_int; 1);
 // len
@@ -354,11 +354,11 @@ dictionaries: ([] time: `timestamp$2022.01.30D12:00:54.125743896 + 1000000000 * 
 .test.ASSERT_ERROR["get_row - 4th"; .api.pick_row; (dictionaries; 3); "index out of bounds"]
 
 // get_attribute - sorted
-/ .test.ASSERT_EQ["get_attribute - sorted"; .api.murmur[`s#1 2 3]; "Clean"]
+.test.ASSERT_EQ["get_attribute - sorted"; .api.murmur[`s#1 2 3]; "Clean"]
 // get_attribute - unique
-/ .test.ASSERT_EQ["get_attribute - unique"; .api.murmur[`u#1 2 3]; `Alone]
+.test.ASSERT_EQ["get_attribute - unique"; .api.murmur[`u#1 2 3]; `Alone]
 // get_attribute - parted
-/ .test.ASSERT_EQ["get_attribute - parted"; .api.murmur[`p#1 2 3]; (::)]
+.test.ASSERT_EQ["get_attribute - parted"; .api.murmur[`p#1 2 3]; (::)]
 
 // append
 .test.ASSERT_EQ["append - compound"; .api.concat_list2[(::; `metals; `fire); ("clay"; 316)]; (::; `metals; `fire; "clay"; 316)]
@@ -392,10 +392,10 @@ dictionaries: ([] time: `timestamp$2022.01.30D12:00:54.125743896 + 1000000000 * 
 / planet: .api.eden[];
 / .test.ASSERT_EQ["set_qtype"; type planet; 112h]
 
-/ // set_attribute
-/ .test.ASSERT_EQ["set_attribute"; .api.labeling 1 2 3; `s#1 2 3]
-/ // set_attribute - failure
-/ .test.ASSERT_ERROR["set_attribute - failure"; .api.labeling; enlist 777; "not a simple list"]
+// set_attribute
+.test.ASSERT_EQ["set_attribute"; .api.labeling 1 2 3; `s#1 2 3]
+// set_attribute - failure
+.test.ASSERT_ERROR["set_attribute - failure"; .api.labeling; enlist 777; "not a simple list"]
 
 // q_ipc_encode
 list: (til 3; "abc"; 2018.02.18D04:30:00.000000000; `revive);
